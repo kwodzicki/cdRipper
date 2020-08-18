@@ -2,7 +2,7 @@ import logging
 try:
   import discid
 except:
-  logging.getLogger(__name__).critcal("Error importing 'discid', may have to set LD_LIBRARY_PATH")
+  logging.getLogger(__name__).critical("Error importing 'discid', may have to set LD_LIBRARY_PATH")
 
 import os, tempfile
 from urllib.request import urlopen
@@ -14,6 +14,11 @@ musicbrainz.set_useragent( __name__, __version__, __url__ )
   
 
 class CDMetaData( discid.Disc ):
+  """
+  Sub-class of discid.Disc that enables searching of MusicBrainz
+
+  """
+
   def __init__(self, features = ["mnc", "isrc"], cache = tempfile.gettempdir() ):
     super().__init__()
     self.log      = logging.getLogger(__name__)
@@ -21,13 +26,39 @@ class CDMetaData( discid.Disc ):
     self.cache    = cache
 
   def getMetaData(self):
-    releases = self.searchMusicBrainz()
-    if releases:
-      release = self.filterReleases( releases )
-      return self.parseRelease( release )
-    return None
+    """
+    Download metadata based on discid
+
+    Arguments:
+      None.
+
+    Keyword Arguments:
+      None.
+
+    Returns:
+      dict: Meta
+
+    """
+
+    releases = self.searchMusicBrainz()                                             # Run method to search MusicBrainz using discid
+    if releases:                                                                    # If releases found based on discid
+      release = self.filterReleases( releases )                                     # Filter the releases
+      return self.parseRelease( release )                                           # Parse releases into internal format and return
+    return None                                                                     # If made here, no releases matched, return None
 
   def searchMusicBrainz(self, includes = ['artists', 'recordings', 'isrcs'] ):
+    """
+    Search the MusicBrainz database for release based on discid
+
+    Arguments:
+      None.
+
+    Keyword arguments:
+      includes (list) : Attributes a release must contain to be considered?
+
+    Returns: 
+
+    """ 
    # try:
    #   self.id
    # except:
@@ -35,7 +66,7 @@ class CDMetaData( discid.Disc ):
    #   self.read( features = self.features )
    # else:
    #   self.log.info("Already have discID: '{}', using it again".format( self.id ) )
-    self.read( features = self.features )
+    self.read( features = self.features )                                           # Read given features from the disc
     
     self.log.debug( 'Searching for disc on musicbrainz' )
     try:
@@ -48,9 +79,22 @@ class CDMetaData( discid.Disc ):
       if ('disc' not in result):
         self.log.warning( 'No disc information returned!' )
         return None
-    return result['disc']['release-list']
+    return result['disc']['release-list']                                           # Return list of releases with matching discid
 
   def getCoverArt(self, release):
+    """
+    Get cover art for given release
+
+    Arguments:
+      release : A release object
+
+    Keyword arguments:
+      None.
+
+    Returns:
+      Path to cover art if download success, None otherwise
+
+    """
     try:
       imgs = musicbrainz.get_image_list( release['id'] ) 
     except musicbrainz.ResponseError:
@@ -65,6 +109,19 @@ class CDMetaData( discid.Disc ):
     return None
 
   def parseRelease( self, release ):
+    """
+    Parse information from release into internal format
+
+    Arguments:
+      release : Release object
+
+    Keyword arguments:
+      None.
+
+    Returns:
+      list: List of dictionaries containing track information for tagging
+
+    """
     cover  = self.getCoverArt( release )
     tracks = []
     for i, track in enumerate( release['medium-list']['track-list'] ):
@@ -73,7 +130,9 @@ class CDMetaData( discid.Disc ):
                'album'                      : release['title'],
                'title'                      : track['recording']['title'],
                'tracknumber'                : int(track['number']),
-               'totaltracks'                : int(release['medium-list']['track-count']),
+               'totaltracks'                : int(release['medium-list' ]['track-count']),
+               'discnumber'                 : int(release['medium-list' ]['position'   ]),
+               'totaldiscs'                 : int(release['medium-count']),
                'date'                       : release['date'],
                'asin'                       : release['asin'],
                'isrc'                       : self.tracks[i].isrc,
@@ -82,7 +141,8 @@ class CDMetaData( discid.Disc ):
                'musicbrainz_releasetrackid' : track['id'],
                'musicbrainz_artistid'       : '',
                'musicbrainz_albumid'        : release['id'],
-        }
+      }
+
       if cover: track['cover-art'] = cover
       tracks.append( track )
     return tracks
@@ -112,14 +172,27 @@ class CDMetaData( discid.Disc ):
     return medium_list[ isrcMatches.index( max(isrcMatches) ) ]                             # Get maximum number of track matches; get index of that value in array, return release with most track matches based on ISRC
 
   def _download(self, URL):
-    lcl = os.path.join(self.cache, URL.split('/')[-1])
-    try:
-      img = urlopen( URL ).read()
+    """
+    Download remote file to local machine given URL
+
+    Arguments:
+      URL (str): Full URL of remote file to download
+
+    Keyword arguments:
+      None.
+
+    Returns:
+      str: Path to local file if success, None otherwise
+
+    """
+    lcl = os.path.join(self.cache, URL.split('/')[-1])                                      # Path to local file
+    try:                                                                                    # Try to
+      img = urlopen( URL ).read()                                                           # Open and read remote file
     except:
-      self.log.warning('Failed to download: {}'.format(URL) )
-    else:
-      with open( lcl, 'wb' ) as fid:
-        fid.write( img )
-      self.log.info( 'Cover art downloaded to: {}'.format(lcl) )
-      return lcl
-    return None
+      self.log.warning('Failed to download: {}'.format(URL) )                               # Log warning on exception
+    else:                                                                                   # If download success
+      with open( lcl, 'wb' ) as fid:                                                        # Open local file in binary write mode
+        fid.write( img )                                                                    # Write downloaded data to local file
+      self.log.info( 'Cover art downloaded to: {}'.format(lcl) )                            # Log info
+      return lcl                                                                            # Return path to local file
+    return None                                                                             # If made here, download failed, return None
