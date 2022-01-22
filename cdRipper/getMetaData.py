@@ -79,7 +79,7 @@ class CDMetaData( discid.Disc ):
       if ('disc' not in result):
         self.log.warning( 'No disc information returned!' )
         return None
-    return result['disc']['release-list']                                           # Return list of releases with matching discid
+    return result['disc'].get('release-list', None)                                     # Return list of releases with matching discid
 
   def getCoverArt(self, release):
     """
