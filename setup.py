@@ -15,7 +15,7 @@ setuptools.setup(
   author_email     = "krwodzicki@gmail.com",
   version          = main_ns['__version__'],
   packages         = setuptools.find_packages(),
-  install_requires = [ "discid", "musicbrainzngs", "watchdog"],
+  install_requires = [ "discid", "musicbrainzngs", "watchdog", "pyudev"],
   scripts          = ['bin/cdRipper'],
   zip_safe         = False
 )
