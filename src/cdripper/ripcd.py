@@ -10,10 +10,7 @@ from threading import Thread, Event
 
 import pyudev
 
-from .get_metadata import CDMetaData
-
-meta = CDMetaData()
-
+from .metadata import CDMetaData
 
 KEY = 'DEVNAME'
 CHANGE = 'DISK_MEDIA_CHANGE'
@@ -30,127 +27,144 @@ signal.signal(signal.SIGINT, lambda *args: RUNNING.set())
 signal.signal(signal.SIGTERM, lambda *args: RUNNING.set())
 
 
-class Watchdog(Thread):
-
-    def __init__(self, outdir):
-        super().__init__()
-
-        self.log = logging.getLogger(__name__)
-        self._mounted = {}
-        self.outdir = outdir
-        self.context = pyudev.Context()
-        self.monitor = pyudev.Monitor.from_netlink(self.context)
-        self.monitor.filter_by(subsystem='block')
-
-    def run(self):
-        """
-        Processing for thread
-
-        Polls udev for device changes, running MakeMKV pipelines
-        when dvd/bluray found
-
-        """
-
-        self.log.info('Watchdog thread started')
-        while not RUNNING.is_set():
-            device = self.monitor.poll(timeout=1.0)
-            if device is None:
-                continue
-
-            # Get value for KEY. If is None, then did not exist, so continue
-            dev = device.properties.get(KEY, None)
-            if dev is None:
-                continue
-
-            if device.properties.get(EJECT, ''):
-                self.log.debug("Eject request: %s", dev)
-                thread = self._mounted.pop(dev, None)
-                if thread is not None and thread.is_alive():
-                    self.log.warning("Ripper thread still alive!")
-                continue
-
-            if device.properties.get(READY, '') == '0':
-                self.log.debug("Drive is ejected: %s", dev)
-                continue
-
-            # If we did NOT change an insert/eject event
-            if device.properties.get(CHANGE, None):
-                # The STATUS key does not seem to exist for CD
-                if device.properties.get(STATUS, '') != '':
-                    msg = (
-                        'Caught event that was NOT insert/eject, '
-                        'ignoring : %s'
-                    )
-                    self.log.debug(msg, dev)
-                    continue
-
-                if dev in self._mounted:
-                    self.log.info('Device in mounted list: %s', dev)
-                    continue
-
-                self.log.debug('Finished mounting : %s', dev)
-                thread = Thread(
-                    target=main,
-                    args=(self.outdir,),
-                    kwargs={'dev': dev},
-                )
-                thread.start()
-                self._mounted[dev] = thread
-                continue
-
-            # If dev is NOT in mounted, initialize to False
-            if dev not in self._mounted:
-                self.log.info('Odd event : %s', dev)
-                continue
-
-
-def main(outDirBase, dev=None):
+def main(outdir):
     """
-    Rip CD, convert to FLAC, and tag all files using metadata from MusicBrainz
+    Monitor udev
 
-    Arguments:
-        outDirBase (str): Top-level directory to store FLAC files in. Files
-            will be placed in directory with structure:
-                Artist/Album/Tracks.flac
-
-    Keyword arguments:
-        None.
-
-    Returns:
-        bool
+    Polls udev for device changes, running MakeMKV pipelines
+    when dvd/bluray found
 
     """
 
     log = logging.getLogger(__name__)
 
-    tmpDir = os.path.join(tempfile.gettempdir(), randomHash())
-    os.makedirs(tmpDir, exist_ok=True)
+    mounted = {}
+    outdir = outdir
+    context = pyudev.Context()
+    monitor = pyudev.Monitor.from_netlink(context)
+    monitor.filter_by(subsystem='block')
 
-    meta.cache = tmpDir
-    tracks = meta.getMetaData()
-    if not tracks:
-        return False
+    log.info('Watchdog thread started')
+    while not RUNNING.is_set():
+        device = monitor.poll(timeout=1.0)
+        if device is None:
+            continue
 
-    outDir = os.path.join(
-        outDirBase,
-        tracks[0]['albumartist'],
-        tracks[0]['album'],
-    )
+        # Get value for KEY. If is None, then did not exist, so continue
+        dev = device.properties.get(KEY, None)
+        if dev is None:
+            continue
 
-    status = ripcd(tmpDir, dev=dev)
-    if status:
-        status = convert2FLAC(tmpDir, outDir, tracks)
+        if device.properties.get(EJECT, ''):
+            log.debug("Eject request: %s", dev)
+            thread = mounted.pop(dev, None)
+            if thread is not None and thread.is_alive():
+                log.warning("Ripper thread still alive!")
+            continue
 
-    cleanUp(tmpDir)
+        if device.properties.get(READY, '') == '0':
+            log.debug("Drive is ejected: %s", dev)
+            thread = mounted.pop(dev, None)
+            if thread is not None and thread.is_alive():
+                log.warning("Ripper thread still alive!")
+            continue
 
-    log.debug('Ejecting disc')
-    cmd = ['eject']
-    if dev is not None:
-        cmd.append(dev)
+        # If we did NOT change an insert/eject event
+        if device.properties.get(CHANGE, None):
+            # The STATUS key does not seem to exist for CD
+            if device.properties.get(STATUS, '') != '':
+                msg = (
+                    'Caught event that was NOT insert/eject, '
+                    'ignoring : %s'
+                )
+                log.debug(msg, dev)
+                continue
 
-    Popen(cmd)
+            if dev in mounted:
+                log.info('Device in mounted list: %s', dev)
+                continue
 
-    return status
+            log.debug('Finished mounting : %s', dev)
+            thread = RipDisc(outdir, dev=dev)
+            thread.start()
+            mounted[dev] = thread
+            continue
+
+        # If dev is NOT in mounted, initialize to False
+        if dev not in mounted:
+            log.info('Odd event : %s', dev)
+            continue
+
+
+class RipDisc(Thread):
+    """
+    Rip CD, convert to FLAC, tag with MusicBrainz
+
+    """
+
+    def __init__(self, outdir, dev=None, **kwargs):
+        """
+        Arguments:
+            outDirBase (str): Top-level directory to store FLAC files in. Files
+                will be placed in directory with structure:
+                    Artist/Album/Tracks.flac
+
+        Keyword arguments:
+            None.
+
+        Returns:
+            bool
+
+        """
+
+        super().__init__()
+
+        self.log = logging.getLogger(__name__)
+        self.outdir = outdir
+        self.dev = dev
+        self.kwargs = kwargs
+        self.status = None
+        self.meta = None
+
+    def run(self):
+
+        tmpdir = os.path.join(
+            tempfile.gettempdir(),
+            randomHash(),
+        )
+        os.makedirs(tmpdir, exist_ok=True)
+
+        # Set kwargs for CDMetaData; ovveride cache with locally defined
+        kwargs = {
+            **self.kwargs,
+            'cache': tmpdir,
+        }
+        self.meta = CDMetaData(**kwargs)
+
+        tracks = self.meta.getMetaData()
+        if not tracks:
+            self.status = False
+            return
+
+        outdir = os.path.join(
+            self.outdir,
+            tracks[0]['albumartist'],
+            tracks[0]['album'],
+        )
+
+        self.status = ripcd(tmpdir, dev=self.dev)
+        if self.status:
+            self.status = convert2FLAC(tmpdir, outdir, tracks)
+
+        cleanup(tmpdir)
+
+        self.log.debug('Ejecting disc')
+        cmd = ['eject']
+        if self.dev is not None:
+            cmd.append(self.dev)
+
+        proc = Popen(cmd)
+        proc.wait
 
 
 def ripcd(outDir, dev=None):
@@ -216,7 +230,7 @@ def convert2FLAC(srcDir, outDir, tracks):
 
     coverart = None
     # Zip the list of tracks and list of files in directory; iterate over them
-    for info, inFile in zip(tracks, listDir(srcDir)):
+    for info, inFile in zip(tracks, listdir(srcDir)):
         cmd = ['flac']  # Base command for conversion
         # If cover art info, append picture option to flac command
         if 'cover-art' in info:
@@ -267,7 +281,7 @@ def randomHash():
     ).hexdigest()
 
 
-def listDir(directory):
+def listdir(directory):
     """
     Get sorted list of all files with '.wav' extension in a directory
 
@@ -290,7 +304,7 @@ def listDir(directory):
     return sorted(files)
 
 
-def cleanUp(directory: str):
+def cleanup(directory: str):
     """Recursively delete directory"""
 
     for root, dirs, items in os.walk(directory):

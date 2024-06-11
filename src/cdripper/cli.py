@@ -1,5 +1,5 @@
 import argparse
-from cdripper.ripcd import Watchdog
+from cdripper import ripcd
 
 
 def main():
@@ -12,5 +12,4 @@ def main():
 
     args = parser.parse_args()
 
-    inst = Watchdog(args.outdir)
-    inst.start()
+    ripcd.main(args.outdir)

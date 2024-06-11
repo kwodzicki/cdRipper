@@ -31,6 +31,7 @@ class CDMetaData(discid.Disc):
         self,
         features=["mnc", "isrc"],
         cache=tempfile.gettempdir(),
+        **kwargs,
     ):
         super().__init__()
         self.log = logging.getLogger(__name__)
