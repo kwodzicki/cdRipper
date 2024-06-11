@@ -1,13 +1,16 @@
 import logging
 import signal
-import os, tempfile, time, hashlib
+import os
+import tempfile
+import time
+import hashlib
 from subprocess import Popen, DEVNULL, STDOUT
 from datetime import datetime
 from threading import Thread, Event
 
 import pyudev
 
-from .getMetaData import CDMetaData
+from .get_metadata import CDMetaData
 
 meta = CDMetaData()
 
@@ -82,7 +85,7 @@ class Watchdog(Thread):
                     continue
 
                 if dev in self._mounted:
-                    self.log.info('Device in mounted list: %s', dev) 
+                    self.log.info('Device in mounted list: %s', dev)
                     continue
 
                 self.log.debug('Finished mounting : %s', dev)
@@ -106,14 +109,15 @@ def main(outDirBase, dev=None):
     Rip CD, convert to FLAC, and tag all files using metadata from MusicBrainz
 
     Arguments:
-      outDirBase (str): Top-level directory to store FLAC files in. Files will be
-        placed in directory with structure: Artist/Album/Tracks.flac
+        outDirBase (str): Top-level directory to store FLAC files in. Files
+            will be placed in directory with structure:
+                Artist/Album/Tracks.flac
 
     Keyword arguments:
-      None.
+        None.
 
     Returns:
-      bool
+        bool
 
     """
 
@@ -131,12 +135,12 @@ def main(outDirBase, dev=None):
         outDirBase,
         tracks[0]['albumartist'],
         tracks[0]['album'],
-    ) 
+    )
 
-    status = ripCD(tmpDir, dev=dev)
+    status = ripcd(tmpDir, dev=dev)
     if status:
-      status = convert2FLAC(tmpDir, outDir, tracks)
-    
+        status = convert2FLAC(tmpDir, outDir, tracks)
+
     cleanUp(tmpDir)
 
     log.debug('Ejecting disc')
@@ -146,10 +150,10 @@ def main(outDirBase, dev=None):
 
     Popen(cmd)
 
-    return status 
+    return status
 
 
-def ripCD(outDir, dev=None):
+def ripcd(outDir, dev=None):
     """
     Rip CD to a temporary directory
 
@@ -157,10 +161,10 @@ def ripCD(outDir, dev=None):
         outDir (str): Top-level directory to rip CD files to.
 
     Keyword arguments:
-      None.
+        None.
 
     Returns:
-      bool
+        bool
 
     """
 
@@ -191,16 +195,17 @@ def convert2FLAC(srcDir, outDir, tracks):
     Convert wav files ripped from CD to FLAC
 
     Arguments:
-      srcDir (str): Top-level directory of ripped CD files.
-      outDir (str): Top-level directory to store FLAC files in. Files will be
-        placed in directory with structure: Artist/Album/Tracks.flac
-      tracks (list): Dictionaries containing information for each track of the CD
+        srcDir (str): Top-level directory of ripped CD files.
+        outDir (str): Top-level directory to store FLAC files in. Files will
+            be placed in directory with structure: Artist/Album/Tracks.flac
+        tracks (list): Dictionaries containing information for each track
+            of the CD
 
     Keyword arguments:
-      None.
+        None.
 
     Returns:
-      bool
+        bool
 
     """
 
@@ -212,14 +217,14 @@ def convert2FLAC(srcDir, outDir, tracks):
     coverart = None
     # Zip the list of tracks and list of files in directory; iterate over them
     for info, inFile in zip(tracks, listDir(srcDir)):
-        cmd = ['flac']                                                                          # Base command for conversion
+        cmd = ['flac']  # Base command for conversion
         # If cover art info, append picture option to flac command
         if 'cover-art' in info:
             coverart = info.pop('cover-art')
             cmd.append(f'--picture={coverart}')
 
         # Iterate over key/value pairs in info, append tag option to command
-        for key, val in info.items():  
+        for key, val in info.items():
             cmd.append(f'--tag={key}={val}')
 
         # Set basename for flac fil,e
@@ -238,7 +243,7 @@ def convert2FLAC(srcDir, outDir, tracks):
         # Append output-name option to flac command
         cmd.append(f'--output-name={outFile}')
 
-        # Append input file to command 
+        # Append input file to command
         cmd.append(inFile)
 
         proc = Popen(cmd, stdout=DEVNULL, stderr=STDOUT)
@@ -259,7 +264,7 @@ def randomHash():
 
     return hashlib.md5(
         str(time.time()).encode()
-    ).hexdigest() 
+    ).hexdigest()
 
 
 def listDir(directory):
@@ -282,16 +287,15 @@ def listDir(directory):
         path = os.path.join(directory, item)
         if os.path.isfile(path) and path.endswith('.wav'):
             files.append(path)
-    return sorted( files )
+    return sorted(files)
 
 
 def cleanUp(directory: str):
-  """Recursively delete directory"""
+    """Recursively delete directory"""
 
-  for root, dirs, items in os.walk(directory):
+    for root, dirs, items in os.walk(directory):
         for item in items:
             path = os.path.join(root, item)
             if os.path.isfile(path):
                 os.remove(path)
         os.rmdir(root)
-
