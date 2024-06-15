@@ -189,15 +189,19 @@ class CDMetaData(discid.Disc):
 
         return releases[isrcMatches.index(max(isrcMatches))]
 
-    def filterMediumByFormat(self, medium_list, fmt: str = 'CD'):
+    def filterMediumByFormat(
+        self,
+        medium_list: list[dict],
+        fmt: str = 'CD',
+    ) -> list[dict]:
 
         return [
             medium
             for medium in medium_list
-            if medium['format'] == fmt
+            if fmt in medium['format']
         ]
 
-    def filterMediumByISRCs(self, medium_list):
+    def filterMediumByISRCs(self, medium_list: list[dict]) -> dict:
         isrcMatches = []
         # Iterate over all medium; i.e., CD, vinyl, etc.
         for medium in medium_list:
