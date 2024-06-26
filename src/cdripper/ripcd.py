@@ -15,7 +15,6 @@ from .metadata import CDMetaData
 KEY = 'DEVNAME'
 CHANGE = 'DISK_MEDIA_CHANGE'
 STATUS = "ID_CDROM_MEDIA_STATE"  # This appears on DVD/Blu-ray mount
-DISC = "ID_CDROM"
 EJECT = "DISK_EJECT_REQUEST"  # This appears when initial eject requested
 READY = "SYSTEMD_READY"  # This appears when disc tray is out
 
@@ -69,31 +68,27 @@ def main(outdir):
                 log.warning("Ripper thread still alive!")
             continue
 
-        # If we did NOT change an insert/eject event
-        if device.properties.get(CHANGE, None):
-            # The STATUS key does not seem to exist for CD
-            if device.properties.get(STATUS, '') != '':
-                msg = (
-                    'Caught event that was NOT insert/eject, '
-                    'ignoring : %s'
-                )
-                log.debug(msg, dev)
-                continue
-
-            if dev in mounted:
-                log.info('Device in mounted list: %s', dev)
-                continue
-
-            log.debug('Finished mounting : %s', dev)
-            thread = RipDisc(outdir, dev=dev)
-            thread.start()
-            mounted[dev] = thread
+        if device.properties.get(CHANGE, '') != '1':
+            log.debug("Not a '%s' event, ignoring: %s", CHANGE, dev)
             continue
 
-        # If dev is NOT in mounted, initialize to False
-        if dev not in mounted:
-            log.info('Odd event : %s', dev)
+        # The STATUS key does not seem to exist for CD
+        if device.properties.get(STATUS, '') != '':
+            msg = (
+                'Caught event that was NOT insert/eject, '
+                'ignoring : %s'
+            )
+            log.debug(msg, dev)
             continue
+
+        if dev in mounted:
+            log.info('Device in mounted list: %s', dev)
+            continue
+
+        log.debug('Finished mounting : %s', dev)
+        thread = RipDisc(outdir, dev=dev)
+        thread.start()
+        mounted[dev] = thread
 
 
 class RipDisc(Thread):
@@ -164,7 +159,7 @@ class RipDisc(Thread):
             cmd.append(self.dev)
 
         proc = Popen(cmd)
-        proc.wait
+        proc.wait()
 
 
 def ripcd(outDir, dev=None):

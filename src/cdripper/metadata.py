@@ -83,7 +83,6 @@ class CDMetaData(discid.Disc):
         self.read(device=dev, features=self.features)
 
         self.log.debug("Discid: %s", self.id)
-
         self.log.debug('Searching for disc on musicbrainz')
         try:
             result = (
@@ -97,10 +96,11 @@ class CDMetaData(discid.Disc):
         except musicbrainz.ResponseError:
             self.log.error("Disc not found or bad response")
             return None
-        else:
-            if ('disc' not in result):
-                self.log.warning('No disc information returned!')
-                return None
+
+        if 'disc' not in result:
+            self.log.warning('No disc information returned!')
+            return None
+
         # Return list of releases with matching discid
         return result['disc'].get('release-list', None)
 
@@ -123,13 +123,13 @@ class CDMetaData(discid.Disc):
             imgs = musicbrainz.get_image_list(release['id'])
         except musicbrainz.ResponseError:
             self.log.warning("Failed to get images")
-        else:
-            if 'images' not in imgs:
-                self.log.warning("No image information returned!")
-                return None
-        for img in imgs['images']:
+            return None
+
+        for img in imgs.get('images', []):
             if img['front']:
                 return self._download(img['image'])
+
+        self.log.warning("No image information returned!")
         return None
 
     def parseRelease(self, release):
@@ -148,25 +148,35 @@ class CDMetaData(discid.Disc):
         """
 
         cover = self.getCoverArt(release)
+        # Set some info that applies to all tracks
+        base_info = {
+            'artist': release.get('artist-credit-phrase', ''),
+            'albumartist': release.get('artist-credit-phrase', ''),
+            'album': release.get('title', ''),
+            'totaltracks': int(
+                release.get('medium-list', {}).get('track-count', '0')
+            ),
+            'discnumber': int(
+                release.get('medium-list', {}).get('position', '1')
+            ),
+            'totaldiscs': int(release.get('medium-count', '1')),
+            'date': release.get('date', ''),
+            'asin': release.get('asin', ''),
+            'musicbrainz_albumid': release.get('id', ''),
+         }
+
         tracks = []
         for i, track in enumerate(release['medium-list']['track-list']):
+            # Per track data; include the base_info in all
             track = {
-                'artist': release['artist-credit-phrase'],
-                'albumartist': release['artist-credit-phrase'],
-                'album': release['title'],
-                'title': track['recording']['title'],
-                'tracknumber': int(track['number']),
-                'totaltracks': int(release['medium-list']['track-count']),
-                'discnumber': int(release['medium-list']['position']),
-                'totaldiscs': int(release['medium-count']),
-                'date': release['date'],
-                'asin': release['asin'],
+                **base_info,
+                'title': track.get('recording', {}).get('title', ''),
+                'tracknumber': int(track.get('number', '0')),
                 'isrc': self.tracks[i].isrc,
                 'discid': self.id,
                 'musicbrainz_trackid': track['recording']['id'],
                 'musicbrainz_releasetrackid': track['id'],
                 'musicbrainz_artistid': '',
-                'musicbrainz_albumid': release['id'],
             }
 
             if cover:
@@ -254,11 +264,9 @@ class CDMetaData(discid.Disc):
             img = urlopen(url).read()  # Open and read remote file
         except Exception:
             self.log.warning('Failed to download: %s', url)
-        else:  # If download success
-            with open(lcl, mode='wb') as fid:
-                fid.write(img)
-            self.log.info('Cover art downloaded to: %s', lcl)
-            return lcl  # Return path to local file
+            return None
 
-        # If made here, download failed, return None
-        return None
+        with open(lcl, mode='wb') as fid:
+            fid.write(img)
+        self.log.info('Cover art downloaded to: %s', lcl)
+        return lcl  # Return path to local file
