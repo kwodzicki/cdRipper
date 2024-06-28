@@ -55,38 +55,37 @@ def main(outdir):
             continue
 
         if device.properties.get(EJECT, ''):
-            log.debug("Eject request: %s", dev)
+            log.debug("%s - Eject request", dev)
             thread = mounted.pop(dev, None)
             if thread is not None and thread.is_alive():
-                log.warning("Ripper thread still alive!")
+                log.warning("%s - Ripper thread still alive!", dev)
             continue
 
         if device.properties.get(READY, '') == '0':
-            log.debug("Drive is ejected: %s", dev)
+            log.debug("%s - Drive is ejected", dev)
             thread = mounted.pop(dev, None)
             if thread is not None and thread.is_alive():
-                log.warning("Ripper thread still alive!")
+                log.warning("%s - Ripper thread still alive!", dev)
             continue
 
         if device.properties.get(CHANGE, '') != '1':
-            log.debug("Not a '%s' event, ignoring: %s", CHANGE, dev)
+            log.debug("%s - Not a '%s' event, ignoring", dev, CHANGE)
             continue
 
         # The STATUS key does not seem to exist for CD
         if device.properties.get(STATUS, '') != '':
-            msg = (
-                'Caught event that was NOT insert/eject, '
-                'ignoring : %s'
+            log.debug(
+                '%s - Caught event that was NOT insert/eject, ignoring',
+                dev,
             )
-            log.debug(msg, dev)
             continue
 
         if dev in mounted:
-            log.info('Device in mounted list: %s', dev)
+            log.info('%s - Device in mounted list', dev)
             continue
 
-        log.debug('Finished mounting : %s', dev)
-        thread = RipDisc(outdir, dev=dev)
+        log.debug('%s - Finished mounting', dev)
+        thread = RipDisc(outdir, dev)
         thread.start()
         mounted[dev] = thread
 
@@ -97,7 +96,7 @@ class RipDisc(Thread):
 
     """
 
-    def __init__(self, outdir, dev=None, **kwargs):
+    def __init__(self, outdir, dev, **kwargs):
         """
         Arguments:
             outDirBase (str): Top-level directory to store FLAC files in. Files
@@ -134,7 +133,7 @@ class RipDisc(Thread):
             **self.kwargs,
             'cache': tmpdir,
         }
-        self.meta = CDMetaData(**kwargs)
+        self.meta = CDMetaData(self.dev, **kwargs)
 
         tracks = self.meta.getMetaData()
         if not tracks:
@@ -149,11 +148,11 @@ class RipDisc(Thread):
 
         self.status = ripcd(tmpdir, dev=self.dev)
         if self.status:
-            self.status = convert2FLAC(tmpdir, outdir, tracks)
+            self.status = convert2FLAC(self.dev, tmpdir, outdir, tracks)
 
         cleanup(tmpdir)
 
-        self.log.debug('Ejecting disc')
+        self.log.debug("%s - Ejecting disc", self.dev)
         cmd = ['eject']
         if self.dev is not None:
             cmd.append(self.dev)
@@ -162,12 +161,12 @@ class RipDisc(Thread):
         proc.wait()
 
 
-def ripcd(outDir, dev=None):
+def ripcd(outdir, dev=None):
     """
     Rip CD to a temporary directory
 
     Arguments:
-        outDir (str): Top-level directory to rip CD files to.
+        outdir (str): Top-level directory to rip CD files to.
 
     Keyword arguments:
         None.
@@ -179,33 +178,33 @@ def ripcd(outDir, dev=None):
 
     log = logging.getLogger(__name__)
 
-    log.info('Starting CD rip')
+    log.info("%s - Starting CD rip", dev)
     t0 = datetime.now()
     cmd = ['cdparanoia', '-Bw']
     if dev is not None:
         cmd.extend(['--force-cdrom-device', dev])
 
-    log.info("Running command: %s", cmd)
+    log.info("%s - Running command: %s", dev, cmd)
     proc = Popen(
         cmd,
-        cwd=outDir,
-        # stdout=DEVNULL,
-        # stderr=STDOUT,
+        cwd=outdir,
+        stdout=DEVNULL,
+        stderr=STDOUT,
     )
-    log.info('Waiting for CD rip to finish')
+    log.info("%s - Waiting for CD rip to finish", dev)
     proc.wait()
-    log.info('Rip completed in: %s', datetime.now() - t0)
+    log.info("%s - Rip completed in: %s", dev, datetime.now() - t0)
 
     return True
 
 
-def convert2FLAC(srcDir, outDir, tracks):
+def convert2FLAC(dev, srcdir, outdir, tracks):
     """
     Convert wav files ripped from CD to FLAC
 
     Arguments:
-        srcDir (str): Top-level directory of ripped CD files.
-        outDir (str): Top-level directory to store FLAC files in. Files will
+        srcdir (str): Top-level directory of ripped CD files.
+        outdir (str): Top-level directory to store FLAC files in. Files will
             be placed in directory with structure: Artist/Album/Tracks.flac
         tracks (list): Dictionaries containing information for each track
             of the CD
@@ -220,12 +219,16 @@ def convert2FLAC(srcDir, outDir, tracks):
 
     log = logging.getLogger(__name__)
 
-    log.info('Converting files to FLAC and placing in: %s', outDir)
-    os.makedirs(outDir, exist_ok=True)
+    log.info(
+        "%s - Converting files to FLAC and placing in: %s",
+        dev,
+        outdir,
+    )
+    os.makedirs(outdir, exist_ok=True)
 
     coverart = None
     # Zip the list of tracks and list of files in directory; iterate over them
-    for info, inFile in zip(tracks, listdir(srcDir)):
+    for info, inFile in zip(tracks, listdir(srcdir)):
         cmd = ['flac']  # Base command for conversion
         # If cover art info, append picture option to flac command
         if 'cover-art' in info:
@@ -247,7 +250,7 @@ def convert2FLAC(srcDir, outDir, tracks):
             outFile = '{:d}-{}'.format(info['discnumber'], outFile)
 
         # Generate full file path
-        outFile = os.path.join(outDir, outFile)
+        outFile = os.path.join(outdir, outFile)
 
         # Append output-name option to flac command
         cmd.append(f'--output-name={outFile}')
@@ -259,10 +262,10 @@ def convert2FLAC(srcDir, outDir, tracks):
         proc.wait()
 
     if coverart is not None:
-        log.info("Moving coverart")
+        log.info("%s - Moving coverart", dev)
         os.rename(
             coverart,
-            os.path.join(outDir, os.path.basename(coverart)),
+            os.path.join(outdir, os.path.basename(coverart)),
         )
 
     return True

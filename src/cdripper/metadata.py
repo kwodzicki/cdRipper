@@ -29,16 +29,18 @@ class CDMetaData(discid.Disc):
 
     def __init__(
         self,
+        dev: str,
         features=["mnc", "isrc"],
         cache=tempfile.gettempdir(),
         **kwargs,
     ):
         super().__init__()
         self.log = logging.getLogger(__name__)
+        self.dev = dev
         self.features = features
         self.cache = cache
 
-    def getMetaData(self, dev=None):
+    def getMetaData(self):
         """
         Download metadata based on discid
 
@@ -54,7 +56,7 @@ class CDMetaData(discid.Disc):
         """
 
         # Run method to search MusicBrainz using discid
-        releases = self.searchMusicBrainz(dev=dev)
+        releases = self.searchMusicBrainz()
         if releases:  # If releases found based on discid
             release = self.filterReleases(releases)  # Filter the releases
             # Parse releases into internal format and return
@@ -63,7 +65,6 @@ class CDMetaData(discid.Disc):
 
     def searchMusicBrainz(
         self,
-        dev=None,
         includes=['artists', 'recordings', 'isrcs'],
     ):
         """
@@ -80,10 +81,10 @@ class CDMetaData(discid.Disc):
         """
 
         # Read given features from the disc
-        self.read(device=dev, features=self.features)
+        self.read(device=self.dev, features=self.features)
 
-        self.log.debug("Discid: %s", self.id)
-        self.log.debug('Searching for disc on musicbrainz')
+        self.log.debug("%s - Discid: %s", self.dev, self.id)
+        self.log.debug("%s - Searching for disc on musicbrainz", self.dev)
         try:
             result = (
                 musicbrainz
@@ -94,11 +95,11 @@ class CDMetaData(discid.Disc):
                 )
             )
         except musicbrainz.ResponseError:
-            self.log.error("Disc not found or bad response")
+            self.log.error("%s - Disc not found or bad response", self.dev)
             return None
 
         if 'disc' not in result:
-            self.log.warning('No disc information returned!')
+            self.log.warning("%s - No disc information returned!", self.dev)
             return None
 
         # Return list of releases with matching discid
@@ -122,14 +123,14 @@ class CDMetaData(discid.Disc):
         try:
             imgs = musicbrainz.get_image_list(release['id'])
         except musicbrainz.ResponseError:
-            self.log.warning("Failed to get images")
+            self.log.warning("%s - Failed to get images", self.dev)
             return None
 
         for img in imgs.get('images', []):
             if img['front']:
                 return self._download(img['image'])
 
-        self.log.warning("No image information returned!")
+        self.log.warning("%s - No image information returned!", self.dev)
         return None
 
     def parseRelease(self, release):
@@ -263,10 +264,10 @@ class CDMetaData(discid.Disc):
         try:
             img = urlopen(url).read()  # Open and read remote file
         except Exception:
-            self.log.warning('Failed to download: %s', url)
+            self.log.warning("%s - Failed to download: %s", self.dev, url)
             return None
 
         with open(lcl, mode='wb') as fid:
             fid.write(img)
-        self.log.info('Cover art downloaded to: %s', lcl)
+        self.log.info("%s - Cover art downloaded to: %s", self.dev, lcl)
         return lcl  # Return path to local file
