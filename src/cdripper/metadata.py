@@ -11,14 +11,44 @@ except ModuleNotFoundError:
     )
 
 import musicbrainzngs as musicbrainz
+from PyQt5.QtCore import QThread, pyqtSignal
 
 from . import __version__, __url__
+from . import utils
 
 musicbrainz.set_useragent(
     __name__,
     __version__,
     __url__,
 )
+
+
+class CDMetaThread(QThread):
+
+    FINISHED = pyqtSignal(str)
+
+    def __init__(self, dev, **kwargs):
+        super().__init__()
+
+        self.log = logging.getLogger(__name__)
+        self.dev = dev
+        self.kwargs = kwargs
+
+        self.tmpdir = None
+        self.tracks = None
+
+    def run(self):
+
+        self.tmpdir = utils.gen_tmpdir(self.dev)
+        # Attept to get disc metadata
+        self.log.info("%s - Attempting to get metadata for disc", self.dev)
+        self.tracks = CDMetaData(
+            self.dev,
+            cache=self.tmpdir,
+            **self.kwargs,
+        ).getMetaData()
+
+        self.FINISHED.emit(self.dev)
 
 
 class CDMetaData(discid.Disc):
@@ -184,7 +214,10 @@ class CDMetaData(discid.Disc):
                 track['cover-art'] = cover
             tracks.append(track)
 
-        return tracks
+        return sorted(
+            tracks,
+            key=lambda val: val['tracknumber'],
+        )
 
     def filterReleases(self, releases):
 

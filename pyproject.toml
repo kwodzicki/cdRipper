@@ -27,6 +27,7 @@ classifiers = [
 requires-python = ">=3.10"
 
 dependencies = [
+    "PyQt5",
     "discid",
     "pyudev",
     "musicbrainzngs",
@@ -37,7 +38,8 @@ Homepage = "https://github.com/kwodzicki/cdRipper"
 test = "https://test.com"
 
 [project.scripts]
-cdripper = "cdripper.cli:main"
+# cdripper = "cdripper.cli:main"
+cdripper = "cdripper.systemtray.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
