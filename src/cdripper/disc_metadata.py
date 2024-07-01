@@ -11,7 +11,7 @@ except ModuleNotFoundError:
     )
 
 import musicbrainzngs as musicbrainz
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
 
 from . import __version__, __url__
 from . import utils
@@ -34,21 +34,29 @@ class CDMetaThread(QThread):
         self.dev = dev
         self.kwargs = kwargs
 
+        self.metadata = None
         self.tmpdir = None
-        self.tracks = None
+        self.releases = None
 
     def run(self):
 
         self.tmpdir = utils.gen_tmpdir(self.dev)
         # Attept to get disc metadata
         self.log.info("%s - Attempting to get metadata for disc", self.dev)
-        self.tracks = CDMetaData(
+        self.metadata = CDMetaData(
             self.dev,
             cache=self.tmpdir,
             **self.kwargs,
-        ).getMetaData()
+        )
+
+        self.releases = self.metadata.searchMusicBrainz()
+        self.log.info("%s - Got releases", self.dev)
 
         self.FINISHED.emit(self.dev)
+
+    def parseRelease(self, release):
+
+        return self.metadata.parseRelease(release)
 
 
 class CDMetaData(discid.Disc):
@@ -69,6 +77,7 @@ class CDMetaData(discid.Disc):
         self.dev = dev
         self.features = features
         self.cache = cache
+        self.releases = None
 
     def getMetaData(self):
         """
@@ -86,9 +95,9 @@ class CDMetaData(discid.Disc):
         """
 
         # Run method to search MusicBrainz using discid
-        releases = self.searchMusicBrainz()
-        if releases:  # If releases found based on discid
-            release = self.filterReleases(releases)  # Filter the releases
+        self.releases = self.searchMusicBrainz()
+        if self.releases:  # If releases found based on discid
+            release = self.filterReleases(self.releases)  # Filter the releases
             # Parse releases into internal format and return
             return self.parseRelease(release)
         return None  # If made here, no releases matched, return None
@@ -96,6 +105,7 @@ class CDMetaData(discid.Disc):
     def searchMusicBrainz(
         self,
         includes=['artists', 'recordings', 'isrcs'],
+        discid=None,
     ):
         """
         Search the MusicBrainz database for release based on discid
@@ -111,16 +121,18 @@ class CDMetaData(discid.Disc):
         """
 
         # Read given features from the disc
-        self.read(device=self.dev, features=self.features)
+        if discid is None:
+            self.read(device=self.dev, features=self.features)
+            discid = self.id
 
-        self.log.debug("%s - Discid: %s", self.dev, self.id)
+        self.log.debug("%s - Discid: %s", self.dev, discid)
         self.log.debug("%s - Searching for disc on musicbrainz", self.dev)
         try:
             result = (
                 musicbrainz
                 .musicbrainz
                 .get_releases_by_discid(
-                    self.id,
+                    discid,
                     includes=includes,
                 )
             )
@@ -180,7 +192,7 @@ class CDMetaData(discid.Disc):
 
         cover = self.getCoverArt(release)
         # Set some info that applies to all tracks
-        base_info = {
+        album_info = {
             'artist': release.get('artist-credit-phrase', ''),
             'albumartist': release.get('artist-credit-phrase', ''),
             'album': release.get('title', ''),
@@ -196,13 +208,21 @@ class CDMetaData(discid.Disc):
             'musicbrainz_albumid': release.get('id', ''),
          }
 
-        tracks = []
+        tracks = {'album_info': album_info} 
         for i, track in enumerate(release['medium-list']['track-list']):
             # Per track data; include the base_info in all
+            track_num = int(track.get('number', '0'))
+            if track_num in tracks:
+                self.log.error(
+                    "Track number already exists in track info! "
+                    "Returning NO metadata"
+                )
+                return []
+
             track = {
-                **base_info,
+                **album_info,
                 'title': track.get('recording', {}).get('title', ''),
-                'tracknumber': int(track.get('number', '0')),
+                'tracknumber': track_num,
                 'isrc': self.tracks[i].isrc,
                 'discid': self.id,
                 'musicbrainz_trackid': track['recording']['id'],
@@ -212,24 +232,41 @@ class CDMetaData(discid.Disc):
 
             if cover:
                 track['cover-art'] = cover
-            tracks.append(track)
 
-        return sorted(
-            tracks,
-            key=lambda val: val['tracknumber'],
-        )
+            tracks[track['tracknumber']] = track
+
+        return tracks
 
     def filterReleases(self, releases):
 
         isrcMatches = []
         for release in releases:
-            release['medium-list'] = self.filterMediumByFormat(
-                release['medium-list']
+            medium_list = release.get('medium-list', [])
+            if len(medium_list) == 0:
+                continue
+            elif len(medium_list) > 1:
+                self.log.warning(
+                    "Found %d mediums in the list",
+                    len(medium_list)
+                )
+
+            medium_list = self.filterMediumByFormat(medium_list)
+            if len(medium_list) == 0:
+                continue
+
+            medium = self.filterMediumByISRCs(medium_list)
+            if medium is None:
+                continue
+
+            release['medium-list'] = medium
+            isrcMatches.append(medium['isrc-matches'])
+
+        if len(isrcMatches) == 0:
+            self.log.warning(
+                "No ISRC matches found for any release! "
+                "Returning first search result",
             )
-            release['medium-list'] = self.filterMediumByISRCs(
-                release['medium-list']
-            )
-            isrcMatches.append(release['medium-list']['isrc-matches'])
+            return releases[0]
 
         return releases[isrcMatches.index(max(isrcMatches))]
 
@@ -242,7 +279,7 @@ class CDMetaData(discid.Disc):
         return [
             medium
             for medium in medium_list
-            if fmt in medium['format']
+            if fmt in medium.get('format', '')
         ]
 
     def filterMediumByISRCs(self, medium_list: list[dict]) -> dict:
@@ -275,6 +312,10 @@ class CDMetaData(discid.Disc):
 
         # Get maximum number of track matches; get index of that value in
         # array, return release with most track matches based on ISRC
+        if len(isrcMatches) == 0:
+            self.log.info("No ISRC matches found for mediums in release!")
+            return None 
+
         return medium_list[isrcMatches.index(max(isrcMatches))]
 
     def _download(self, url: str):

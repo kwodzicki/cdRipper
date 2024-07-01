@@ -15,7 +15,8 @@ import pyudev
 
 from . import LOG, STREAM
 from . import utils
-from .metadata import CDMetaThread
+from .disc_metadata import CDMetaThread
+from .disc_select import SelectDisc, RIP, IGNORE 
 
 KEY = 'DEVNAME'
 CHANGE = 'DISK_MEDIA_CHANGE'
@@ -97,7 +98,7 @@ class RipperWatchdog(QThread):
         self.outdir = outdir
         self.progress_dialog = progress_dialog
 
-        self._mounting = {}
+        self._selector = {}
         self._mounted = {}
         self._context = pyudev.Context()
         self._monitor = pyudev.Monitor.from_netlink(self._context)
@@ -175,9 +176,9 @@ class RipperWatchdog(QThread):
     
             self.__log.debug('%s - Finished mounting', dev)
             meta = CDMetaThread(dev)
-            meta.FINISHED.connect(self.rip_disc)
-            meta.start()
+            meta.FINISHED.connect(self.select_release)
             self._mounted[dev] = meta
+            meta.start()
 
     def _ejecting(self, dev):
 
@@ -190,16 +191,27 @@ class RipperWatchdog(QThread):
             proc.kill()
             return
 
-        # self.__log.debug(
-        #     "Exitcode from ripping processes : %d",
-        #     proc.exitcode,
-        # )
-
     def quit(self, *args, **kwargs):
         RUNNING.set()
 
     @pyqtSlot(str)
-    def rip_disc(self, dev):
+    def select_release(self, dev):
+
+        self.__log.warning("%s - Running select release", dev)
+        meta = self._mounted.get(dev, None)
+        if meta is None:
+            return
+
+        if meta.releases is None:
+            self.__log.info("No metadata found for disc: %s", dev)
+            return
+
+        selector = SelectDisc(dev, meta.releases)
+        selector.FINISHED.connect(self.rip_disc)
+        self._selector[dev] = selector
+
+    @pyqtSlot(int, str, dict)
+    def rip_disc(self, result, dev, release):
         """
         Get information about a disc
 
@@ -211,17 +223,16 @@ class RipperWatchdog(QThread):
 
         """
 
+        if result == IGNORE:
+            return
+
         meta = self._mounted.get(dev, None)
         if meta is None:
             return
 
-        if meta.tracks is None:
-            self.__log.info("No metadata found for disc: %s", dev)
-            return
-
         ripper = Ripper(
             dev,
-            meta.tracks,
+            meta.parseRelease(release),
             meta.tmpdir,
             self.outdir,
             progress=self.progress_dialog,
@@ -330,8 +341,8 @@ class Ripper(QThread):
 
         outdir = os.path.join(
             self.outdir,
-            self.tracks[0]['albumartist'],
-            self.tracks[0]['album'],
+            self.tracks['album_info']['albumartist'],
+            self.tracks['album_info']['album'],
         )
 
         self.proc = utils.cdparanoia(self.dev, self.tmpdir)

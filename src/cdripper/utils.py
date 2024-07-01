@@ -9,7 +9,8 @@ from subprocess import Popen, DEVNULL, PIPE, STDOUT
 from datetime import datetime
 from threading import Thread, Event
 
-CURRENT = rb"outputting to track(\d+)"
+TRACK_NUM = r"track(\d+)"
+CURRENT = rb"outputting to " + TRACK_NUM.encode()
 PROGRESS = rb"== PROGRESS == \[([^\|]*)\|"
 
 
@@ -101,7 +102,7 @@ def convert2FLAC(dev, srcdir, outdir, tracks):
         srcdir (str): Top-level directory of ripped CD files.
         outdir (str): Top-level directory to store FLAC files in. Files will
             be placed in directory with structure: Artist/Album/Tracks.flac
-        tracks (list): Dictionaries containing information for each track
+        tracks (dict): Dictionaries containing information for each track
             of the CD
 
     Keyword arguments:
@@ -123,7 +124,16 @@ def convert2FLAC(dev, srcdir, outdir, tracks):
 
     coverart = None
     # Zip the list of tracks and list of files in directory; iterate over them
-    for info, inFile in zip(tracks, listdir(srcdir)):
+    for track_num, infile in listdir(srcdir):
+        info = tracks.get(track_num, None)
+        if info is None:
+            log.error(
+                "Failed to get track info for track # %d; skipping it",
+                track_num,
+            )
+            os.remove(infile)
+            continue
+
         cmd = ['flac']  # Base command for conversion
         # If cover art info, append picture option to flac command
         if 'cover-art' in info:
@@ -151,7 +161,7 @@ def convert2FLAC(dev, srcdir, outdir, tracks):
         cmd.append(f'--output-name={outFile}')
 
         # Append input file to command
-        cmd.append(inFile)
+        cmd.append(infile)
 
         proc = Popen(cmd, stdout=DEVNULL, stderr=STDOUT)
         proc.wait()
@@ -203,7 +213,21 @@ def cdparanoia_progress(dev, proc, progress):
             line = proc.stdout.readline().strip()
 
     progress.TRACK_SIZE.emit(dev, 100)
-    progress.REMOVE_DISC(dev)
+    progress.REMOVE_DISC.emit(dev)
+
+
+def parse_progress_line(line):
+
+    _match = re.search(PROGRESS, line)
+    if _match is None:
+        return None
+
+    _match = _match.group(1)
+    prog = re.search(rb'\S', _match)
+    if prog is None:
+        return None
+
+    return prog.start(), len(_match)
 
 
 def gen_tmpdir(dev):
@@ -225,7 +249,7 @@ def gen_tmpdir(dev):
     return tmpdir
 
 
-def listdir(directory):
+def listdir(directory, ext: str = '.wav'):
     """
     Get sorted list of all files with '.wav' extension in a directory
 
@@ -242,10 +266,15 @@ def listdir(directory):
 
     files = []
     for item in os.listdir(directory):
-        path = os.path.join(directory, item)
-        if os.path.isfile(path) and path.endswith('.wav'):
-            files.append(path)
-    return sorted(files)
+        if not item.endswith(ext):
+            continue
+
+        obj = re.search(TRACK_NUM, item)
+        if obj is None:
+            continue
+
+        track_num = int(obj.group(1))
+        yield track_num, os.path.join(directory, item)
 
 
 def cleanup(directory: str):
@@ -257,20 +286,6 @@ def cleanup(directory: str):
             if os.path.isfile(path):
                 os.remove(path)
         os.rmdir(root)
-
-
-def parse_progress_line(line):
-
-    _match = re.search(PROGRESS, line)
-    if _match is None:
-        return None
-
-    _match = _match.group(1)
-    prog = re.search(rb'\S', _match)
-    if prog is None:
-        return None
-
-    return prog.start(), len(_match)
 
 
 def get_vendor_model(path: str) -> tuple[str]:

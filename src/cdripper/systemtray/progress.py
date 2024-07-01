@@ -18,7 +18,7 @@ from ..utils import get_vendor_model
 class ProgressDialog(QWidget):
 
     # First arg in dev, second is all info
-    ADD_DISC = pyqtSignal(str, list)
+    ADD_DISC = pyqtSignal(str, dict)
     # Arg is dev of disc to remove
     REMOVE_DISC = pyqtSignal(str)
     # First arg is dev, second is track num
@@ -51,8 +51,8 @@ class ProgressDialog(QWidget):
     def __len__(self):
         return len(self.widgets)
 
-    @pyqtSlot(str, list)
-    def add_disc(self, dev: str, info: list):
+    @pyqtSlot(str, dict)
+    def add_disc(self, dev: str, info: dict):
         self.log.debug("Adding disc: %s", dev)
         widget = ProgressWidget(dev, info)
         widget.CANCEL.connect(self.cancel)
@@ -105,9 +105,10 @@ class ProgressWidget(QFrame):
 
     CANCEL = pyqtSignal(str)  # dev to cancel rip of
 
-    def __init__(self, dev: str, info: list):
+    def __init__(self, dev: str, info: dict):
         super().__init__()
 
+        self.log = logging.getLogger(__name__)
         self.setFrameStyle(
             QFrame.StyledPanel | QFrame.Plain
         )
@@ -118,27 +119,75 @@ class ProgressWidget(QFrame):
         self.dev = dev
         self.info = info
 
+        album_info = info.get('album_info', {})
+        tot_tracks = album_info.get('totaltracks', 'NA')
+        disc_num = album_info.get('discnumber', 'NA')
+        tot_discs = album_info.get('totaldiscs', 'NA')
+
         vendor, model = get_vendor_model(dev)
-        self.title = QLabel(f"{vendor} {model} : {dev}")
-        self.track_label = QLabel('')
-        self.track_count = QLabel('')
+
+        # Set up label for name of the drive disc is in
+        self.drive_name = QLabel(f"{vendor} {model} : {dev}")
+
+        # Set up label for name of the artist 
+        self.artist_label = QLabel("Artist:")
+        self.artist = QLabel(
+            album_info.get('artist', 'NA')
+        )
+
+        # Set up label for name of the album
+        self.album_label = QLabel("Album:")
+        self.album = QLabel(
+            album_info.get('album', 'NA')
+        )
+
+        # Set up label for name of the track being ripped
+        self.track_label = QLabel("Track:")
+        self.track = QLabel('')
+
+        # Set label for total number of tracks on album
+        self.track_count = QLabel(
+            f"[of {tot_tracks}]"
+        )
+
+        # Set label for disc number/total number of discs
+        self.disc_count_label = QLabel("Disc:")
+        self.disc_count = QLabel(
+            f"{disc_num}/{tot_discs}"
+        )
+
+        # Set up progress bar for rip of track
         self.track_prog = QProgressBar()
         self.track_prog.setRange(0, 100)
         self.track_prog.setValue(0)
 
+        # Set up progress bar for overall disc rip
         self.disc_label = QLabel('Overall Progress')
         self.disc_prog = QProgressBar()
         self.disc_prog.setRange(0, len(info) * 100)
         self.disc_prog.setValue(0)
 
+        # Button to cancel ripping
         self.cancel_but = QPushButton("Cancel Rip")
         self.cancel_but.clicked.connect(self.cancel)
 
         layout = QGridLayout()
-        layout.addWidget(self.title, 0, 0, 1, 3)
-        layout.addWidget(self.track_label, 10, 0)
-        layout.addWidget(self.track_count, 10, 2)
-        layout.addWidget(self.track_prog, 11, 0, 1, 3)
+        layout.addWidget(self.drive_name, 0, 0, 1, 3)
+
+        layout.addWidget(self.artist_label, 10, 0)
+        layout.addWidget(self.artist, 10, 1)
+
+        layout.addWidget(self.album_label, 11, 0)
+        layout.addWidget(self.album, 11, 1)
+
+        layout.addWidget(self.track_label, 12, 0)
+        layout.addWidget(self.track, 12, 1)
+        layout.addWidget(self.track_count, 12, 2)
+
+        layout.addWidget(self.disc_count_label, 13, 0)
+        layout.addWidget(self.disc_count, 13, 1)
+
+        layout.addWidget(self.track_prog, 15, 0, 1, 3)
         layout.addWidget(self.disc_label, 20, 0, 1, 3)
         layout.addWidget(self.disc_prog, 21, 0, 1, 3)
         layout.addWidget(self.cancel_but, 30, 0, 1, 3)
@@ -178,14 +227,14 @@ class ProgressWidget(QFrame):
             self.track_prog.setValue(100)
             self.track_progs[self.current_title] = 100
 
-        self.track_label.setText(
-            f"Outfile: ",
-        )
-        self.track_count.setText(
-            f"Title: {title}/{len(self)}",
+        info = self.info.get(title, {})
+        if len(info) == 0:
+            self.log.error("Missing track info for track # %d", title) 
+
+        self.track.setText(
+            f"{title} - {info.get('title', 'N/A')}",
         )
 
-        self.track_prog.setValue(0)
         self.current_title = title - 1 
 
     def track_size(self, tsize: int):
@@ -196,6 +245,7 @@ class ProgressWidget(QFrame):
 
         """
 
+        print(tsize)
         self.track_progs[self.current_title] = tsize
         self.track_prog.setValue(tsize)
         self.disc_prog.setValue(sum(self.track_progs))
