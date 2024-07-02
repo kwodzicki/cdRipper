@@ -1,58 +1,14 @@
 import logging
-import signal
 import os
 import re
 import tempfile
 import time
 import hashlib
 from subprocess import Popen, DEVNULL, PIPE, STDOUT
-from datetime import datetime
-from threading import Thread, Event
 
 TRACK_NUM = r"track(\d+)"
 CURRENT = rb"outputting to " + TRACK_NUM.encode()
 PROGRESS = rb"== PROGRESS == \[([^\|]*)\|"
-
-
-def ripcd(dev):
-
-    tmpdir = os.path.join(
-        tempfile.gettempdir(),
-        randomHash(),
-    )
-    os.makedirs(tmpdir, exist_ok=True)
-
-    # Set kwargs for CDMetaData; ovveride cache with locally defined
-    kwargs = {
-        **self.kwargs,
-        'cache': tmpdir,
-    }
-    self.meta = CDMetaData(self.dev, **kwargs)
-
-    tracks = self.meta.getMetaData()
-    if not tracks:
-        self.status = False
-        return
-
-    outdir = os.path.join(
-        self.outdir,
-        tracks[0]['albumartist'],
-        tracks[0]['album'],
-    )
-
-    self.status = ripcd(tmpdir, dev=self.dev)
-    if self.status:
-        self.status = convert2FLAC(self.dev, tmpdir, outdir, tracks)
-
-    cleanup(tmpdir)
-
-    self.log.debug("%s - Ejecting disc", self.dev)
-    cmd = ['eject']
-    if self.dev is not None:
-        cmd.append(self.dev)
-
-    proc = Popen(cmd)
-    proc.wait()
 
 
 def cdparanoia(dev, outdir):
@@ -209,7 +165,7 @@ def cdparanoia_progress(dev, proc, progress):
                     dev,
                     round(pos / size * 100)
                 )
-            
+
             line = proc.stdout.readline().strip()
 
     progress.TRACK_SIZE.emit(dev, 100)
@@ -264,7 +220,6 @@ def listdir(directory, ext: str = '.wav'):
 
     """
 
-    files = []
     for item in os.listdir(directory):
         if not item.endswith(ext):
             continue
@@ -315,4 +270,3 @@ def get_vendor_model(path: str) -> tuple[str]:
         model = ''
 
     return vendor.strip(), model.strip()
-

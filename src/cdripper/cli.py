@@ -4,6 +4,7 @@ from cdripper import ripcd
 
 from . import STREAM
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(

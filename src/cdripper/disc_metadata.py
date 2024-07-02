@@ -1,3 +1,8 @@
+"""
+Disc ID scan and MusicBrainz search
+
+"""
+
 import logging
 import os
 import tempfile
@@ -11,7 +16,7 @@ except ModuleNotFoundError:
     )
 
 import musicbrainzngs as musicbrainz
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSignal
 
 from . import __version__, __url__
 from . import utils
@@ -24,6 +29,16 @@ musicbrainz.set_useragent(
 
 
 class CDMetaThread(QThread):
+    """
+    Thread for disc ID and search
+
+    To keep the GUI alive, the scan of disc to compute the disc ID and
+    searching of MusicBrainz for the disc are placed in a separate thread.
+
+    When the thread is finished running, a custom FINISHED signal is emitted to
+    signal which dev device has finshed scanning/searching for metadata
+
+    """
 
     FINISHED = pyqtSignal(str)
 
@@ -36,25 +51,39 @@ class CDMetaThread(QThread):
 
         self.metadata = None
         self.tmpdir = None
-        self.releases = None
+        self.result = None
 
     def run(self):
+        """
+        Run scan and search in separate thread
 
+        """
+
+        # Generate temporary directory
         self.tmpdir = utils.gen_tmpdir(self.dev)
-        # Attept to get disc metadata
+
         self.log.info("%s - Attempting to get metadata for disc", self.dev)
+        # Set up metadata object
         self.metadata = CDMetaData(
             self.dev,
             cache=self.tmpdir,
             **self.kwargs,
         )
 
-        self.releases = self.metadata.searchMusicBrainz()
-        self.log.info("%s - Got releases", self.dev)
+        # Search for releases
+        self.result = self.metadata.searchMusicBrainz()
+        self.log.info("%s - Search finished", self.dev)
 
+        # Emit custom finished signal
         self.FINISHED.emit(self.dev)
 
     def parseRelease(self, release):
+        """
+        Parse release information
+
+        Wrapper to access the CDMetaData object's parseRelease() method.
+
+        """
 
         return self.metadata.parseRelease(release)
 
@@ -77,7 +106,7 @@ class CDMetaData(discid.Disc):
         self.dev = dev
         self.features = features
         self.cache = cache
-        self.releases = None
+        self.result = None
 
     def getMetaData(self):
         """
@@ -95,28 +124,44 @@ class CDMetaData(discid.Disc):
         """
 
         # Run method to search MusicBrainz using discid
-        self.releases = self.searchMusicBrainz()
-        if self.releases:  # If releases found based on discid
-            release = self.filterReleases(self.releases)  # Filter the releases
+        self.result = self.searchMusicBrainz()
+
+        # If releases found based on discid
+        if isinstance(self.result, list):
+            # Filter the releases
+            release = self.filterReleases(self.result)
             # Parse releases into internal format and return
             return self.parseRelease(release)
         return None  # If made here, no releases matched, return None
 
     def searchMusicBrainz(
         self,
-        includes=['artists', 'recordings', 'isrcs'],
-        discid=None,
+        includes: list[str] = ['artists', 'recordings', 'isrcs'],
+        discid: str | None = None,
     ):
         """
-        Search the MusicBrainz database for release based on discid
+        Get discid and search MusicBrainz
+
+        Run discid compute to get the unique ID for the disc. Then try to
+        search MusicBrainz for the disc. If the search fails with a response
+        error, then a None object is returned. If the search fails because the
+        discid is not found on MusicBrainz, then return submission URL. Else,
+        return a list of releases corresponding to the disc id
 
         Arguments:
           None.
 
         Keyword arguments:
-          includes (list) : Attributes a release must contain to be considered?
+            includes (list): Attributes a release must contain to be
+                considered?
+            discid (str): A discid to search for on musicbrainz. Setting this
+                will bypass scan of the disc drive
 
         Returns:
+            Depends on what happens:
+                None: MusicBrainz search had error
+                str: Discid not found; is submission url
+                list: Releases corresponding to the discid
 
         """
 
@@ -138,14 +183,15 @@ class CDMetaData(discid.Disc):
             )
         except musicbrainz.ResponseError:
             self.log.error("%s - Disc not found or bad response", self.dev)
-            return None
+            return self.submission_url
+            # return None
 
         if 'disc' not in result:
             self.log.warning("%s - No disc information returned!", self.dev)
-            return None
+            return self.submission_url
 
         # Return list of releases with matching discid
-        return result['disc'].get('release-list', None)
+        return result['disc'].get('release-list', [])
 
     def getCoverArt(self, release):
         """
@@ -208,7 +254,7 @@ class CDMetaData(discid.Disc):
             'musicbrainz_albumid': release.get('id', ''),
          }
 
-        tracks = {'album_info': album_info} 
+        tracks = {'album_info': album_info}
         for i, track in enumerate(release['medium-list']['track-list']):
             # Per track data; include the base_info in all
             track_num = int(track.get('number', '0'))
@@ -314,7 +360,7 @@ class CDMetaData(discid.Disc):
         # array, return release with most track matches based on ISRC
         if len(isrcMatches) == 0:
             self.log.info("No ISRC matches found for mediums in release!")
-            return None 
+            return None
 
         return medium_list[isrcMatches.index(max(isrcMatches))]
 

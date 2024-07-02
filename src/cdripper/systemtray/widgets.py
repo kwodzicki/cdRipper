@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
     QWidget,
     QDialog,
     QDialogButtonBox,
-    QRadioButton,
     QLabel,
     QLineEdit,
     QPushButton,

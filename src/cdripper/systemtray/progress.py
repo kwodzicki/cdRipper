@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
 
+from .. import NAME
 from ..utils import get_vendor_model
 
 
@@ -39,6 +40,8 @@ class ProgressDialog(QWidget):
             & ~Qt.WindowCloseButtonHint
         )
 
+        self.setWindowTitle(f"{NAME} - Rip Progress")
+
         self.widgets = {}
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -60,6 +63,7 @@ class ProgressDialog(QWidget):
         self.layout.addWidget(widget)
         self.widgets[dev] = widget
         self.show()
+        self.adjustSize()
 
     @pyqtSlot(str)
     def remove_disc(self, dev: str):
@@ -70,6 +74,7 @@ class ProgressDialog(QWidget):
             widget.deleteLater()
         if len(self.widgets) == 0:
             self.setVisible(False)
+        self.adjustSize()
 
     @pyqtSlot(str, int)
     def current_track(self, dev: str, title: int):
@@ -129,7 +134,7 @@ class ProgressWidget(QFrame):
         # Set up label for name of the drive disc is in
         self.drive_name = QLabel(f"{vendor} {model} : {dev}")
 
-        # Set up label for name of the artist 
+        # Set up label for name of the artist
         self.artist_label = QLabel("Artist:")
         self.artist = QLabel(
             album_info.get('artist', 'NA')
@@ -229,13 +234,13 @@ class ProgressWidget(QFrame):
 
         info = self.info.get(title, {})
         if len(info) == 0:
-            self.log.error("Missing track info for track # %d", title) 
+            self.log.error("Missing track info for track # %d", title)
 
         self.track.setText(
             f"{title} - {info.get('title', 'N/A')}",
         )
 
-        self.current_title = title - 1 
+        self.current_title = title - 1
 
     def track_size(self, tsize: int):
         """
@@ -245,7 +250,6 @@ class ProgressWidget(QFrame):
 
         """
 
-        print(tsize)
         self.track_progs[self.current_title] = tsize
         self.track_prog.setValue(tsize)
         self.disc_prog.setValue(sum(self.track_progs))

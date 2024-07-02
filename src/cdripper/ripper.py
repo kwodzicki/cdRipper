@@ -9,14 +9,14 @@ import os
 import signal
 import subprocess
 from threading import Event
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSlot
 
 import pyudev
 
 from . import LOG, STREAM
 from . import utils
 from .disc_metadata import CDMetaThread
-from .disc_select import SelectDisc, RIP, IGNORE 
+from .disc_select import SelectDisc, SubmitDisc, IGNORE
 
 KEY = 'DEVNAME'
 CHANGE = 'DISK_MEDIA_CHANGE'
@@ -142,26 +142,30 @@ class RipperWatchdog(QThread):
             device = self._monitor.poll(timeout=1.0)
             if device is None:
                 continue
-    
+
             # Get value for KEY. If is None, then did not exist, so continue
             dev = device.properties.get(KEY, None)
             if dev is None:
                 continue
-    
+
             if device.properties.get(EJECT, ''):
                 self.__log.debug("%s - Eject request", dev)
                 self._ejecting(dev)
                 continue
-    
+
             if device.properties.get(READY, '') == '0':
                 self.__log.debug("%s - Drive is ejected", dev)
                 self._ejecting(dev)
                 continue
-    
+
             if device.properties.get(CHANGE, '') != '1':
-                self.__log.debug("%s - Not a '%s' event, ignoring", dev, CHANGE)
+                self.__log.debug(
+                    "%s - Not a '%s' event, ignoring",
+                    dev,
+                    CHANGE,
+                )
                 continue
-    
+
             # The STATUS key does not seem to exist for CD
             if device.properties.get(STATUS, '') != '':
                 self.__log.debug(
@@ -169,16 +173,13 @@ class RipperWatchdog(QThread):
                     dev,
                 )
                 continue
-    
+
             if dev in self._mounted:
                 self.__log.info('%s - Device in mounted list', dev)
                 continue
-    
+
             self.__log.debug('%s - Finished mounting', dev)
-            meta = CDMetaThread(dev)
-            meta.FINISHED.connect(self.select_release)
-            self._mounted[dev] = meta
-            meta.start()
+            self.disc_lookup(dev)
 
     def _ejecting(self, dev):
 
@@ -194,26 +195,102 @@ class RipperWatchdog(QThread):
     def quit(self, *args, **kwargs):
         RUNNING.set()
 
+    def submit_discid(self, dev: str, submit_url: str):
+        """
+        Submit a discid to musicbrainz
+
+        The disc_lookup() method is connected to the dialog so that when
+        closes, method is called.
+
+        Arguments:
+            dev (str): Dev device discid was run on
+            submit_url (str): URL used to submit the disc ID to MusicBrainz
+
+        """
+
+        submitter = SubmitDisc(dev, submit_url)
+        submitter.FINISHED.connect(self.disc_lookup)
+        self._selector[dev] = submitter
+
+    def select_release(self, dev: str, releases: list[dict]):
+        """
+        Dialog to select release for disc
+
+        If releases found, then open a dialog that contains a table of all
+        releases with matching disc ID so that user can select which one is
+        correct.
+
+        The rip_disc() method is connected to the dialog so that when closes,
+        method is called.
+
+        Arguments:
+            dev (str): Device dics is mount in
+            releases (list): List of releases that match the disc id
+
+        """
+
+        selector = SelectDisc(dev, releases)
+        selector.FINISHED.connect(self.rip_disc)
+        self._selector[dev] = selector
+
     @pyqtSlot(str)
-    def select_release(self, dev):
+    def disc_lookup(self, dev: str):
+        """
+        Used to compute and search disc ID
+
+        Launch a QThread that will scan dev device to compute the disc ID.
+        Then, use this disc ID to search for matching releases in the
+        MusicBrainz database.
+
+        We connect the process_search() to the thread so that is called when
+        thread completes.
+
+        """
+
+        # If empty dev device name, then we are ignorning
+        if dev == '':
+            return
+
+        meta = CDMetaThread(dev)
+        meta.FINISHED.connect(self.process_search)
+        self._mounted[dev] = meta
+        meta.start()
+
+    @pyqtSlot(str)
+    def process_search(self, dev: str):
+        """
+        Process result of disc ID search
+
+        This method is meant to be called after a CDMetaThread thread finishes
+        scanning and search MusicBrainz. The results of that search are
+        processed here, calling the necessary function to either submit the
+        disc ID to MusicBrainz or to attempt a rip.
+
+        Arguments:
+            dev (str): The dev device that was used to compute disc ID.
+
+        """
 
         self.__log.warning("%s - Running select release", dev)
         meta = self._mounted.get(dev, None)
         if meta is None:
             return
 
-        if meta.releases is None:
+        if meta.result is None:
             self.__log.info("No metadata found for disc: %s", dev)
             return
 
-        selector = SelectDisc(dev, meta.releases)
-        selector.FINISHED.connect(self.rip_disc)
-        self._selector[dev] = selector
+        print(meta.result)
+        if isinstance(meta.result, str):
+            self.submit_discid(dev, meta.result)
+            return
+
+        self.select_release(dev, meta.result)
 
     @pyqtSlot(int, str, dict)
     def rip_disc(self, result, dev, release):
         """
-        Get information about a disc
+        Attempt disc rip
 
         Given the /dev path to a disc, load information from database if
         it exists or open GUI for user to input information
@@ -240,68 +317,6 @@ class RipperWatchdog(QThread):
         ripper.start()
         self._mounted[dev] = ripper
 
-    @pyqtSlot(int)
-    def handle_disc_info(self, result):
-        """
-        Rip a whole disc
-
-        Given information about a disc, rip
-        all tracks. Intended to be run as thread
-        so watchdog can keep looking for new discs
-
-        Arguments:
-            dev (str) : Device to rip from
-            outdir (str) : Directory to save mkv files to
-            extras (bool) : Flag for if should rip extras
-
-        """
-
-        # Get list of keys for mounted devices, then iterate over them
-        devs = list(self._mounted.keys())
-        for dev in devs:
-            # Try to pop of information
-            disc_info = self._mounted.pop(dev, None)
-            if disc_info is None:
-                continue
-
-            # Check the "return" status of the dialog
-            if result == IGNORE:
-                self.__log.info('Ignoring disc: %s', dev)
-                return
-
-            # Get information about disc
-            if isinstance(disc_info, tuple):
-                info, sizes = disc_info
-            else:
-                info, sizes = disc_info.info, disc_info.sizes
-
-            # Initialize ripper object
-            if result == RIP:
-                self.rip_disc(dev, info, sizes)
-                return
-
-            if result == SAVE:
-                self.__log.info("Requested metadata save and eject: %s", dev)
-                subprocess.call(['eject', dev])
-                return
-
-            if result == OPEN:
-                self.disc_dialog(dev, discid=getDiscID(dev, self.root))
-                return
-
-            self.__log.error("Unrecognized option: %d", result)
-
-    # def disc_dialog(self, dev, discid=None):
-
-    #     # Open dics metadata GUI and register "callback" for when closes
-    #     dialog = DiscDialog(
-    #         dev,
-    #         dbdir=self.dbdir,
-    #         discid=discid,
-    #     )
-    #     dialog.finished.connect(self.handle_disc_info)
-    #     self._mounted[dev] = dialog
-
 
 class Ripper(QThread):
 
@@ -326,7 +341,7 @@ class Ripper(QThread):
         self.tmpdir = tmpdir
         self.outdir = outdir
         self.progress = progress
- 
+
         self.progress.CANCEL.connect(self.kill)
 
     def run(self):
@@ -371,7 +386,6 @@ class Ripper(QThread):
         if self.proc is None:
             return
         self.proc.kill()
-
 
 
 def cli():
