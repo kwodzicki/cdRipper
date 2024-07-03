@@ -9,7 +9,7 @@ import os
 import signal
 import subprocess
 from threading import Event
-from PyQt5.QtCore import QThread, pyqtSlot
+from PyQt5.QtCore import QObject, QThread, pyqtSlot, pyqtSignal
 
 import pyudev
 
@@ -61,6 +61,8 @@ class RipperWatchdog(QThread):
 
     """
 
+    HANDLE_DISC = pyqtSignal(str)
+
     def __init__(
         self,
         outdir,
@@ -93,12 +95,12 @@ class RipperWatchdog(QThread):
         self.__log = logging.getLogger(__name__)
         self.__log.debug("%s started", __name__)
 
+        self.HANDLE_DISC.connect(self.handle_disc)
         self._outdir = None
 
         self.outdir = outdir
         self.progress_dialog = progress_dialog
 
-        self._selector = {}
         self._mounted = {}
         self._context = pyudev.Context()
         self._monitor = pyudev.Monitor.from_netlink(self._context)
@@ -179,7 +181,8 @@ class RipperWatchdog(QThread):
                 continue
 
             self.__log.debug('%s - Finished mounting', dev)
-            self.disc_lookup(dev)
+            self._mounted[dev] = None
+            self.HANDLE_DISC.emit(dev)
 
     def _ejecting(self, dev):
 
@@ -189,12 +192,67 @@ class RipperWatchdog(QThread):
 
         if proc.isRunning():
             self.__log.warning("%s - Killing the ripper process!", dev)
-            proc.kill()
+            proc.terminate()
             return
 
     def quit(self, *args, **kwargs):
         RUNNING.set()
 
+    @pyqtSlot(str)
+    def handle_disc(self, dev: str):
+
+        self._mounted[dev] = DiscHandler(
+            dev,
+            self.outdir,
+            self.progress_dialog,
+        )
+
+
+class DiscHandler(QObject):
+
+    def __init__(self, dev: str, outdir=None, progress_dialog=None):
+        super().__init__()
+        self.log = logging.getLogger(__name__)
+        self.dev = dev
+        self.outdir = outdir
+        self.progress_dialog = progress_dialog
+
+        self.metadata = None
+        self.selector = None
+        self.submitter = None
+        self.ripper = None
+
+        self.disc_lookup(self.dev)
+
+    def isRunning(self):
+        """
+        Check if is Running:
+
+        """
+
+        # If ripper not yet defined, still going through motions
+        # i.e., running
+        if self.ripper is None:
+            return True
+
+        # Else, return status of the ripper
+        return self.ripper.isRunning()
+
+    def terminate(self):
+        """
+        Kill/close all objects
+
+        """
+
+        if self.metadata is not None:
+            self.metadata.terminate()
+        if self.selector is not None:
+            self.selector.close()
+        if self.submitter is not None:
+            self.submitter.close()
+        if self.ripper is not None:
+            self.ripper.terminate() 
+         
     def submit_discid(self, dev: str, submit_url: str):
         """
         Submit a discid to musicbrainz
@@ -208,9 +266,11 @@ class RipperWatchdog(QThread):
 
         """
 
-        submitter = SubmitDisc(dev, submit_url)
-        submitter.FINISHED.connect(self.disc_lookup)
-        self._selector[dev] = submitter
+        if dev != self.dev:
+            return
+
+        self.submitter = SubmitDisc(dev, submit_url)
+        self.submitter.FINISHED.connect(self.disc_lookup)
 
     def select_release(self, dev: str, releases: list[dict]):
         """
@@ -229,9 +289,11 @@ class RipperWatchdog(QThread):
 
         """
 
-        selector = SelectDisc(dev, releases)
-        selector.FINISHED.connect(self.rip_disc)
-        self._selector[dev] = selector
+        if dev != self.dev:
+            return
+
+        self.selector = SelectDisc(dev, releases)
+        self.selector.FINISHED.connect(self.rip_disc)
 
     @pyqtSlot(str)
     def disc_lookup(self, dev: str):
@@ -251,13 +313,15 @@ class RipperWatchdog(QThread):
         if dev == '':
             return
 
-        meta = CDMetaThread(dev)
-        meta.FINISHED.connect(self.process_search)
-        self._mounted[dev] = meta
-        meta.start()
+        if dev != self.dev:
+            return
+
+        self.metadata = CDMetaThread(dev)
+        self.metadata.FINISHED.connect(self.process_search)
+        self.metadata.start()
 
     @pyqtSlot(str)
-    def process_search(self, dev: str):
+    def process_search(self, dev: str) -> None:
         """
         Process result of disc ID search
 
@@ -271,24 +335,25 @@ class RipperWatchdog(QThread):
 
         """
 
-        self.__log.warning("%s - Running select release", dev)
-        meta = self._mounted.get(dev, None)
-        if meta is None:
+        if dev != self.dev:
             return
 
-        if meta.result is None:
-            self.__log.info("No metadata found for disc: %s", dev)
+        self.log.warning("%s - Running select release", dev)
+        if self.metadata is None:
             return
 
-        print(meta.result)
-        if isinstance(meta.result, str):
-            self.submit_discid(dev, meta.result)
+        if self.metadata.result is None:
+            self.log.info("No metadata found for disc: %s", dev)
             return
 
-        self.select_release(dev, meta.result)
+        if isinstance(self.metadata.result, str):
+            self.submit_discid(dev, self.metadata.result)
+            return
 
-    @pyqtSlot(int, str, dict)
-    def rip_disc(self, result, dev, release):
+        self.select_release(dev, self.metadata.result)
+
+    @pyqtSlot(str, int, dict)
+    def rip_disc(self, dev: str, result: int, release: dict) -> None:
         """
         Attempt disc rip
 
@@ -300,22 +365,23 @@ class RipperWatchdog(QThread):
 
         """
 
+        if dev != self.dev:
+            return
+
         if result == IGNORE:
             return
 
-        meta = self._mounted.get(dev, None)
-        if meta is None:
+        if self.metadata is None:
             return
 
-        ripper = Ripper(
+        self.ripper = Ripper(
             dev,
-            meta.parseRelease(release),
-            meta.tmpdir,
+            self.metadata.parseRelease(release),
+            self.metadata.tmpdir,
             self.outdir,
             progress=self.progress_dialog,
         )
-        ripper.start()
-        self._mounted[dev] = ripper
+        self.ripper.start()
 
 
 class Ripper(QThread):
@@ -342,13 +408,13 @@ class Ripper(QThread):
         self.outdir = outdir
         self.progress = progress
 
-        self.progress.CANCEL.connect(self.kill)
+        self.progress.CANCEL.connect(self.terminate)
 
     def run(self):
-        self.rip_disc()
-        subprocess.call(['eject', self.dev])
+        """
+        Process run in separate thread
 
-    def rip_disc(self):
+        """
 
         if self.progress is not None:
             self.log.info('Emitting add disc signal')
@@ -365,20 +431,20 @@ class Ripper(QThread):
             utils.cdparanoia_progress(self.dev, self.proc, self.progress)
 
         _ = self.proc.communicate()
-
-        print("return code:", self.proc.returncode)
-
-        self.status = utils.convert2FLAC(
-            self.dev,
-            self.tmpdir,
-            outdir,
-            self.tracks,
-        )
+        if self.proc.returncode == 0:
+            self.status = utils.convert2FLAC(
+                self.dev,
+                self.tmpdir,
+                outdir,
+                self.tracks,
+            )
 
         utils.cleanup(self.tmpdir)
+        
+        subprocess.call(['eject', self.dev])
 
     @pyqtSlot(str)
-    def kill(self, dev: str):
+    def terminate(self, dev: str):
         if dev != self.dev:
             return
 

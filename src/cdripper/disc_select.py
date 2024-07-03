@@ -51,8 +51,8 @@ class SelectDisc(QDialog):
 
     """
 
-    # Return code, dev, release information
-    FINISHED = pyqtSignal(int, str, dict)
+    # Return dev, code, release information
+    FINISHED = pyqtSignal(str, int, dict)
 
     def __init__(
         self, dev: str,
@@ -194,7 +194,7 @@ class SelectDisc(QDialog):
             release = self.model.releases[row]
 
         # Emit signal
-        self.FINISHED.emit(self.result(), self.dev, release)
+        self.FINISHED.emit(self.dev, self.result(), release)
 
 
 class SubmitDisc(QDialog):
