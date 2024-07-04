@@ -1,34 +1,13 @@
-"""
-Widgets for disc metadata
-
-"""
-
 import logging
+import os
 
-from PyQt5.QtWidgets import (
-    QDialog,
-    QToolButton,
-    QPushButton,
-    QDialogButtonBox,
-    QTableView,
-    QLabel,
-    QVBoxLayout,
-)
-
-from PyQt5.QtCore import (
-    Qt,
-    QSize,
-    QTimer,
-    QAbstractTableModel,
-    QModelIndex,
-    pyqtSignal,
-)
-
-from PyQt5.Qt import QUrl, QDesktopServices
+from PyQt5 import QtWidgets
+from PyQt5 import QtCore
+from PyQt5 import Qt
 from PyQt5 import QtGui
 
-from . import NAME
-from .utils import get_vendor_model
+from .. import NAME
+from . import utils
 
 # Codes for what to do
 SUBMITTED = 2
@@ -36,7 +15,76 @@ RIP = 1
 IGNORE = 0
 
 
-class SelectDisc(QDialog):
+class MissingOutdirDialog(QtWidgets.QDialog):
+    def __init__(self, outdir, name=NAME):
+        super().__init__()
+
+        self._name = name
+        self.setWindowTitle(f"{self._name}: Output Directory Missing!")
+
+        QBtn = (
+            QtWidgets.QDialogButtonBox.Ok
+            | QtWidgets.QDialogButtonBox.Abort
+        )
+
+        self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        self.layout = QtWidgets.QVBoxLayout()
+        message = (
+            "Could not find the requested output directory: ",
+            os.linesep,
+            outdir,
+            os.linesep,
+            "Would you like to select a new one?",
+        )
+        message = QtWidgets.QLabel(
+            os.linesep.join(message)
+        )
+        self.layout.addWidget(message)
+        self.layout.addWidget(self.buttonBox)
+        self.setLayout(self.layout)
+
+
+class SettingsWidget(QtWidgets.QDialog):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.outdir = PathSelector('Output Location:')
+
+        self.set_settings()
+
+        buttons = (
+            QtWidgets.QDialogButtonBox.Save
+            | QtWidgets.QDialogButtonBox.Cancel
+        )
+        button_box = QtWidgets.QDialogButtonBox(buttons)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.outdir)
+        layout.addWidget(button_box)
+        self.setLayout(layout)
+
+    def set_settings(self):
+
+        settings = utils.load_settings()
+        if 'outdir' in settings:
+            self.outdir.setText(settings['outdir'])
+
+    def get_settings(self):
+
+        settings = {
+            'outdir': self.outdir.getText(),
+        }
+        utils.save_settings(settings)
+        return settings
+
+
+class SelectDisc(QtWidgets.QDialog):
     """
     Dialog with timeout for releases
 
@@ -52,7 +100,7 @@ class SelectDisc(QDialog):
     """
 
     # Return dev, code, release information
-    FINISHED = pyqtSignal(str, int, dict)
+    FINISHED = QtCore.pyqtSignal(str, int, dict)
 
     def __init__(
         self, dev: str,
@@ -67,11 +115,11 @@ class SelectDisc(QDialog):
         self._timeout = timeout
 
         qbtn = (
-            QDialogButtonBox.Save
-            | QDialogButtonBox.Ignore
+            QtWidgets.QDialogButtonBox.Save
+            | QtWidgets.QDialogButtonBox.Ignore
         )
-        self.button_box = QDialogButtonBox(qbtn)
-        self.button_box.addButton('Wait', QDialogButtonBox.HelpRole)
+        self.button_box = QtWidgets.QDialogButtonBox(qbtn)
+        self.button_box.addButton('Wait', QtWidgets.QDialogButtonBox.HelpRole)
         self.button_box.clicked.connect(self.action)
 
         message = (
@@ -85,7 +133,7 @@ class SelectDisc(QDialog):
         )
 
         self.timeout_fmt = "Disc will begin ripping in: {:>4d} seconds"
-        self.timeout_label = QLabel(
+        self.timeout_label = QtWidgets.QLabel(
             self.timeout_fmt.format(self._timeout)
         )
 
@@ -93,17 +141,20 @@ class SelectDisc(QDialog):
         self.model = MyTableModel(releases)
 
         # Build the table
-        self.table = QTableView()
+        self.table = QtWidgets.QTableView()
         self.table.setModel(self.model)
-        self.table.verticalHeader().setVisible(False)  # Hide row names
-        self.table.setSelectionBehavior(QTableView.SelectRows)  # Select by row
-        self.table.setSelectionMode(QTableView.SingleSelection)  # Select one
+        # Hide row names
+        self.table.verticalHeader().setVisible(False)
+        # Select by row
+        self.table.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
+        # Select one
+        self.table.setSelectionMode(QtWidgets.QTableView.SingleSelection)
         self.table.selectRow(0)  # Select first row by default
 
         # Setup layout and add widgets
-        layout = QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         layout.addWidget(
-            QLabel(message)
+            QtWidgets.QLabel(message)
         )
         layout.addWidget(self.timeout_label)
         layout.addWidget(self.table)
@@ -112,11 +163,11 @@ class SelectDisc(QDialog):
         self.setLayout(layout)
 
         # Set up widget title
-        vendor, model = get_vendor_model(self.dev)
+        vendor, model = utils.get_vendor_model(self.dev)
         self.setWindowTitle(f"{NAME} - {vendor} {model}")
 
         # Set timeout timer
-        self._timer = QTimer()
+        self._timer = QtCore.QTimer()
         self._timer.timeout.connect(self._message_timeout)
         self._timer.start(1000)
         self.show()
@@ -162,12 +213,13 @@ class SelectDisc(QDialog):
         self._timer.stop()
 
         # If button has HelpRole, then erase timer label and return
-        if self.button_box.buttonRole(button) == QDialogButtonBox.HelpRole:
+        role = self.button_box.buttonRole(button)
+        if role == QtWidgets.QDialogButtonBox.HelpRole:
             self.timeout_label.setText('')
             return
 
         # If is the Save button, then signal rip and return
-        if button == self.button_box.button(QDialogButtonBox.Save):
+        if button == self.button_box.button(QtWidgets.QDialogButtonBox.Save):
             self.done(RIP)
             return
 
@@ -197,7 +249,7 @@ class SelectDisc(QDialog):
         self.FINISHED.emit(self.dev, self.result(), release)
 
 
-class SubmitDisc(QDialog):
+class SubmitDisc(QtWidgets.QDialog):
     """
     Dialog to submit disc ID to MusicBrainz
 
@@ -211,7 +263,7 @@ class SubmitDisc(QDialog):
 
     """
 
-    FINISHED = pyqtSignal(str)
+    FINISHED = QtCore.pyqtSignal(str)
 
     def __init__(self, dev: str, url: str, parent=None):
         super().__init__(parent)
@@ -222,23 +274,23 @@ class SubmitDisc(QDialog):
 
         # Set up botton (with icon) to trigger open of URL in browser
         self.icon = QtGui.QIcon.fromTheme("media-optical")
-        self.submit_button = QToolButton()
+        self.submit_button = QtWidgets.QToolButton()
         self.submit_button.setIcon(self.icon)
-        self.submit_button.setIconSize(QSize(128, 128))
+        self.submit_button.setIconSize(QtCore.QSize(128, 128))
         self.submit_button.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon
         )
         self.submit_button.setText("Submit disc ID")
         self.submit_button.clicked.connect(self.submit)
 
         # Button for ignore the disc
-        self.ignore_button = QPushButton("Ignore")
+        self.ignore_button = QtWidgets.QPushButton("Ignore")
         self.ignore_button.clicked.connect(self.ignore)
 
         # But to signal that the disc ID has been submitted to MusciBrainz.
         # Note that this button is not initially added to the layout
         # See the submit() method
-        self.submitted_button = QPushButton("Submitted!")
+        self.submitted_button = QtWidgets.QPushButton("Submitted!")
         self.submitted_button.clicked.connect(self.submitted)
 
         message = (
@@ -247,15 +299,15 @@ class SubmitDisc(QDialog):
             "This will require you to login to MusicBrainz.\n"
         )
 
-        self.message = QLabel(message)
+        self.message = QtWidgets.QLabel(message)
 
         # Set layout and add widgets
-        layout = QVBoxLayout()
+        layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.message)
         layout.addWidget(
             self.submit_button,
             0,
-            Qt.AlignmentFlag.AlignHCenter,
+            QtCore.Qt.AlignmentFlag.AlignHCenter,
         )
         layout.addWidget(self.ignore_button)
         self.setLayout(layout)
@@ -269,8 +321,8 @@ class SubmitDisc(QDialog):
         """
 
         # Define URL and open in webbrowser
-        url = QUrl(self.url)
-        _ = QDesktopServices.openUrl(url)
+        url = Qt.QUrl(self.url)
+        _ = Qt.QDesktopServices.openUrl(url)
 
         # Get widget layout
         layout = self.layout()
@@ -324,7 +376,51 @@ class SubmitDisc(QDialog):
             return
 
 
-class MyTableModel(QAbstractTableModel):
+class PathSelector(QtWidgets.QWidget):
+
+    def __init__(self, label, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.__log = logging.getLogger(__name__)
+        self.path = None
+
+        self.path_text = QtWidgets.QLineEdit()
+        self.path_button = QtWidgets.QPushButton('Select Path')
+        self.path_button.clicked.connect(self.path_select)
+
+        layout = QtWidgets.QHBoxLayout()
+        layout.addWidget(self.path_text)
+        layout.addWidget(self.path_button)
+        widget = QtWidgets.QWidget()
+        widget.setLayout(layout)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(QtWidgets.QLabel(label))
+        layout.addWidget(widget)
+
+        self.setLayout(layout)
+
+    def setText(self, var):
+
+        self.path_text.setText(var)
+
+    def getText(self):
+
+        return self.path_text.text()
+
+    def path_select(self, *args, **kwargs):
+
+        path = (
+            QtWidgets
+            .QFileDialog
+            .getExistingDirectory(self, 'Select Folder')
+        )
+        if path != '' and os.path.isdir(path):
+            self.setText(path)
+            self.__log.info(path)
+
+
+class MyTableModel(QtCore.QAbstractTableModel):
     """
     Table model for release information
 
@@ -378,11 +474,11 @@ class MyTableModel(QAbstractTableModel):
     def headerData(
         self,
         section: int,
-        orientation: Qt.Orientation,
+        orientation: QtCore.Qt.Orientation,
         role: int,
     ):
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
+        if role == QtCore.Qt.DisplayRole:
+            if orientation == QtCore.Qt.Horizontal:
                 return self.columns[section]
             return ""
 
@@ -392,8 +488,8 @@ class MyTableModel(QAbstractTableModel):
     def rowCount(self, parent=None):
         return len(self.data)
 
-    def data(self, index: QModelIndex, role: int):
-        if role == Qt.DisplayRole:
+    def data(self, index: QtCore.QModelIndex, role: int):
+        if role == QtCore.Qt.DisplayRole:
             row = index.row()
             col = index.column()
             return str(self.data[row][col])

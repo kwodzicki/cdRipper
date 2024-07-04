@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-from importlib.metadata import metadata
+from importlib.metadata import metadata as pkg_metadata
 
 NAME = 'cdRipper'
 
@@ -51,7 +51,7 @@ ROTFILE.setFormatter(
 LOG.addHandler(STREAM)
 LOG.addHandler(ROTFILE)
 
-meta = metadata(__name__)
+meta = pkg_metadata(__name__)
 __version__ = meta.json['version']
 __url__ = meta.json['project_url'][0].split(',')[1].strip()
 

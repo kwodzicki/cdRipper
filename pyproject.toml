@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdripper"
-version = "0.6.0"
+version = "1.0.0"
 description = "Package for automagically rip and tag CDs when inserted"
 readme = "README.md"
 authors = [
@@ -35,11 +35,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/kwodzicki/cdRipper"
-test = "https://test.com"
 
 [project.scripts]
 # cdripper = "cdripper.cli:main"
-cdripper = "cdripper.systemtray.main:cli"
+cdripper = "cdripper.ui.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

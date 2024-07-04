@@ -42,3 +42,32 @@ def save_settings(settings: dict) -> None:
     )
     with open(SETTINGS_FILE, 'w') as fid:
         json.dump(settings, fid)
+
+
+def get_vendor_model(path: str) -> tuple[str]:
+    """
+    Get the vendor and model of drive
+
+    """
+
+    path = os.path.join(
+        '/sys/class/block/',
+        os.path.basename(path),
+        'device',
+    )
+
+    vendor = os.path.join(path, 'vendor')
+    if os.path.isfile(vendor):
+        with open(vendor, mode='r') as iid:
+            vendor = iid.read()
+    else:
+        vendor = ''
+
+    model = os.path.join(path, 'model')
+    if os.path.isfile(model):
+        with open(model, mode='r') as iid:
+            model = iid.read()
+    else:
+        model = ''
+
+    return vendor.strip(), model.strip()

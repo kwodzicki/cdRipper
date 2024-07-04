@@ -1,33 +1,24 @@
 import logging
 
-from PyQt5.QtWidgets import (
-    QWidget,
-    QProgressBar,
-    QLabel,
-    QPushButton,
-    QMessageBox,
-    QVBoxLayout,
-    QGridLayout,
-    QFrame,
-)
-from PyQt5.QtCore import Qt, pyqtSlot, pyqtSignal
+from PyQt5 import QtWidgets
+from PyQt5 import QtCore
 
 from .. import NAME
-from ..utils import get_vendor_model
+from .utils import get_vendor_model
 
 
-class ProgressDialog(QWidget):
+class ProgressDialog(QtWidgets.QWidget):
 
     # First arg in dev, second is all info
-    ADD_DISC = pyqtSignal(str, dict)
+    ADD_DISC = QtCore.pyqtSignal(str, dict)
     # Arg is dev of disc to remove
-    REMOVE_DISC = pyqtSignal(str)
+    REMOVE_DISC = QtCore.pyqtSignal(str)
     # First arg is dev, second is track num
-    CUR_TRACK = pyqtSignal(str, int)
+    CUR_TRACK = QtCore.pyqtSignal(str, int)
     # First arg is dev, second is size of cur track
-    TRACK_SIZE = pyqtSignal(str, int)
+    TRACK_SIZE = QtCore.pyqtSignal(str, int)
     # dev of the rip to cancel
-    CANCEL = pyqtSignal(str)
+    CANCEL = QtCore.pyqtSignal(str)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,13 +28,13 @@ class ProgressDialog(QWidget):
 
         self.setWindowFlags(
             self.windowFlags()
-            & ~Qt.WindowCloseButtonHint
+            & ~QtCore.Qt.WindowCloseButtonHint
         )
 
         self.setWindowTitle(f"{NAME} - Rip Progress")
 
         self.widgets = {}
-        self.layout = QVBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
         self.ADD_DISC.connect(self.add_disc)
@@ -54,7 +45,7 @@ class ProgressDialog(QWidget):
     def __len__(self):
         return len(self.widgets)
 
-    @pyqtSlot(str, dict)
+    @QtCore.pyqtSlot(str, dict)
     def add_disc(self, dev: str, info: dict):
         self.log.debug("Adding disc: %s", dev)
         widget = ProgressWidget(dev, info)
@@ -65,7 +56,7 @@ class ProgressDialog(QWidget):
         self.show()
         self.adjustSize()
 
-    @pyqtSlot(str)
+    @QtCore.pyqtSlot(str)
     def remove_disc(self, dev: str):
         self.log.debug("Removing disc: %s", dev)
         widget = self.widgets.pop(dev, None)
@@ -76,7 +67,7 @@ class ProgressDialog(QWidget):
             self.setVisible(False)
         self.adjustSize()
 
-    @pyqtSlot(str, int)
+    @QtCore.pyqtSlot(str, int)
     def current_track(self, dev: str, title: int):
         self.log.debug("Setting current track: %s - %s", dev, title)
         widget = self.widgets.get(dev, None)
@@ -84,7 +75,7 @@ class ProgressDialog(QWidget):
             return
         widget.current_track(title)
 
-    @pyqtSlot(str, int)
+    @QtCore.pyqtSlot(str, int)
     def track_size(self, dev, tsize):
         self.log.debug("Update current track size: %s - %d", dev, tsize)
         widget = self.widgets.get(dev, None)
@@ -92,13 +83,13 @@ class ProgressDialog(QWidget):
             return
         widget.track_size(tsize)
 
-    @pyqtSlot(str)
+    @QtCore.pyqtSlot(str)
     def cancel(self, dev):
         self.CANCEL.emit(dev)
         self.REMOVE_DISC.emit(dev)
 
 
-class ProgressWidget(QFrame):
+class ProgressWidget(QtWidgets.QFrame):
     """
     Progress for a single disc
 
@@ -108,14 +99,14 @@ class ProgressWidget(QFrame):
 
     """
 
-    CANCEL = pyqtSignal(str)  # dev to cancel rip of
+    CANCEL = QtCore.pyqtSignal(str)  # dev to cancel rip of
 
     def __init__(self, dev: str, info: dict):
         super().__init__()
 
         self.log = logging.getLogger(__name__)
         self.setFrameStyle(
-            QFrame.StyledPanel | QFrame.Plain
+            QtWidgets.QFrame.StyledPanel | QtWidgets.QFrame.Plain
         )
         self.setLineWidth(1)
 
@@ -132,51 +123,51 @@ class ProgressWidget(QFrame):
         vendor, model = get_vendor_model(dev)
 
         # Set up label for name of the drive disc is in
-        self.drive_name = QLabel(f"{vendor} {model} : {dev}")
+        self.drive_name = QtWidgets.QLabel(f"{vendor} {model} : {dev}")
 
         # Set up label for name of the artist
-        self.artist_label = QLabel("Artist:")
-        self.artist = QLabel(
+        self.artist_label = QtWidgets.QLabel("Artist:")
+        self.artist = QtWidgets.QLabel(
             album_info.get('artist', 'NA')
         )
 
         # Set up label for name of the album
-        self.album_label = QLabel("Album:")
-        self.album = QLabel(
+        self.album_label = QtWidgets.QLabel("Album:")
+        self.album = QtWidgets.QLabel(
             album_info.get('album', 'NA')
         )
 
         # Set up label for name of the track being ripped
-        self.track_label = QLabel("Track:")
-        self.track = QLabel('')
+        self.track_label = QtWidgets.QLabel("Track:")
+        self.track = QtWidgets.QLabel('')
 
         # Set label for total number of tracks on album
-        self.track_count = QLabel(
+        self.track_count = QtWidgets.QLabel(
             f"[of {tot_tracks}]"
         )
 
         # Set label for disc number/total number of discs
-        self.disc_count_label = QLabel("Disc:")
-        self.disc_count = QLabel(
+        self.disc_count_label = QtWidgets.QLabel("Disc:")
+        self.disc_count = QtWidgets.QLabel(
             f"{disc_num}/{tot_discs}"
         )
 
         # Set up progress bar for rip of track
-        self.track_prog = QProgressBar()
+        self.track_prog = QtWidgets.QProgressBar()
         self.track_prog.setRange(0, 100)
         self.track_prog.setValue(0)
 
         # Set up progress bar for overall disc rip
-        self.disc_label = QLabel('Overall Progress')
-        self.disc_prog = QProgressBar()
+        self.disc_label = QtWidgets.QLabel('Overall Progress')
+        self.disc_prog = QtWidgets.QProgressBar()
         self.disc_prog.setRange(0, len(info) * 100)
         self.disc_prog.setValue(0)
 
         # Button to cancel ripping
-        self.cancel_but = QPushButton("Cancel Rip")
+        self.cancel_but = QtWidgets.QPushButton("Cancel Rip")
         self.cancel_but.clicked.connect(self.cancel)
 
-        layout = QGridLayout()
+        layout = QtWidgets.QGridLayout()
         layout.addWidget(self.drive_name, 0, 0, 1, 3)
 
         layout.addWidget(self.artist_label, 10, 0)
@@ -204,7 +195,7 @@ class ProgressWidget(QFrame):
 
     def cancel(self, *args, **kwargs):
 
-        message = QMessageBox()
+        message = QtWidgets.QMessageBox()
         res = message.question(
             self,
             '',
