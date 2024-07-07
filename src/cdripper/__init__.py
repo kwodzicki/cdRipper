@@ -6,6 +6,7 @@ from importlib.metadata import metadata as pkg_metadata
 NAME = 'cdRipper'
 
 HOMEDIR = os.path.expanduser('~')
+OUTDIR = os.path.join(HOMEDIR, 'Music')
 APPDIR = os.path.join(
     HOMEDIR,
     'Library',

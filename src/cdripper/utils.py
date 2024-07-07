@@ -150,7 +150,7 @@ def cdparanoia_progress(dev, proc, progress):
         while line != b'' and proc.poll() is None:
             search = re.search(CURRENT, line)
             if search is not None:
-                current = int(search.group(1))
+                current = str(int(search.group(1)))
                 progress.CUR_TRACK.emit(dev, current)
                 break
 
@@ -205,7 +205,7 @@ def gen_tmpdir(dev):
     return tmpdir
 
 
-def listdir(directory, ext: str = '.wav'):
+def listdir(directory, ext: str = '.wav') -> tuple[str]:
     """
     Get sorted list of all files with '.wav' extension in a directory
 
@@ -216,7 +216,7 @@ def listdir(directory, ext: str = '.wav'):
       None.
 
     Returns:
-      list: Full file paths to all .wav files in directory
+      tuple[str]: Full file paths to all .wav files in directory
 
     """
 
@@ -228,7 +228,7 @@ def listdir(directory, ext: str = '.wav'):
         if obj is None:
             continue
 
-        track_num = int(obj.group(1))
+        track_num = str(int(obj.group(1)))
         yield track_num, os.path.join(directory, item)
 
 

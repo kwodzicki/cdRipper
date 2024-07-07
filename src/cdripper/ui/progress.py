@@ -14,7 +14,7 @@ class ProgressDialog(QtWidgets.QWidget):
     # Arg is dev of disc to remove
     REMOVE_DISC = QtCore.pyqtSignal(str)
     # First arg is dev, second is track num
-    CUR_TRACK = QtCore.pyqtSignal(str, int)
+    CUR_TRACK = QtCore.pyqtSignal(str, str)
     # First arg is dev, second is size of cur track
     TRACK_SIZE = QtCore.pyqtSignal(str, int)
     # dev of the rip to cancel
@@ -67,8 +67,8 @@ class ProgressDialog(QtWidgets.QWidget):
             self.setVisible(False)
         self.adjustSize()
 
-    @QtCore.pyqtSlot(str, int)
-    def current_track(self, dev: str, title: int):
+    @QtCore.pyqtSlot(str, str)
+    def current_track(self, dev: str, title: str):
         self.log.debug("Setting current track: %s - %s", dev, title)
         widget = self.widgets.get(dev, None)
         if widget is None:
@@ -110,7 +110,7 @@ class ProgressWidget(QtWidgets.QFrame):
         )
         self.setLineWidth(1)
 
-        self.track_progs = [0] * len(info)
+        self.track_progs = []
         self.current_title = None
         self.dev = dev
         self.info = info
@@ -205,7 +205,7 @@ class ProgressWidget(QtWidgets.QFrame):
         if res == message.Yes:
             self.CANCEL.emit(self.dev)
 
-    def current_track(self, title: int):
+    def current_track(self, title: str):
         """
         Update current track index
 
@@ -221,8 +221,9 @@ class ProgressWidget(QtWidgets.QFrame):
         # to be maximum size of the track
         if self.current_title is not None:
             self.track_prog.setValue(100)
-            self.track_progs[self.current_title] = 100
+            self.track_progs[-1] = 100
 
+        self.track_progs.append(0)
         info = self.info.get(title, {})
         if len(info) == 0:
             self.log.error("Missing track info for track # %d", title)
@@ -231,7 +232,7 @@ class ProgressWidget(QtWidgets.QFrame):
             f"{title} - {info.get('title', 'N/A')}",
         )
 
-        self.current_title = title - 1
+        self.current_title = title
 
     def track_size(self, tsize: int):
         """
@@ -241,6 +242,9 @@ class ProgressWidget(QtWidgets.QFrame):
 
         """
 
-        self.track_progs[self.current_title] = tsize
+        if len(self.track_progs) == 0:
+            return
+
+        self.track_progs[-1] = tsize
         self.track_prog.setValue(tsize)
         self.disc_prog.setValue(sum(self.track_progs))

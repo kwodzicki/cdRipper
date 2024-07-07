@@ -167,7 +167,11 @@ class CDMetaData(discid.Disc):
 
         # Read given features from the disc
         if discid is None:
-            self.read(device=self.dev, features=self.features)
+            try:
+                self.read(device=self.dev, features=self.features)
+            except Exception as err:
+                self.log.error("%s - Failed to get discid: %s", self.dev, err)
+                return []
             discid = self.id
 
         self.log.debug("%s - Discid: %s", self.dev, discid)
@@ -279,7 +283,7 @@ class CDMetaData(discid.Disc):
             if cover:
                 track['cover-art'] = cover
 
-            tracks[track['tracknumber']] = track
+            tracks[str(track_num)] = track
 
         return tracks
 
