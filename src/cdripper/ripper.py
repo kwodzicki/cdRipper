@@ -151,12 +151,12 @@ class DiscHandler(QtCore.QObject):
         if dev != self.dev:
             return
 
-        self.log.warning("%s - Running select release", dev)
+        self.log.info("%s - Running select release", dev)
         if self.metadata is None:
             return
 
         if self.metadata.result is None:
-            self.log.info("No metadata found for disc: %s", dev)
+            self.log.info("%s - No metadata found for disc", dev)
             return
 
         if isinstance(self.metadata.result, str):
@@ -189,8 +189,8 @@ class DiscHandler(QtCore.QObject):
 
         self.ripper = Ripper(
             dev,
-            self.metadata.parseRelease(release),
-            self.metadata.tmpdir,
+            self.metadata,
+            release,
             self.outdir,
             progress=self.progress_dialog,
         )
@@ -199,7 +199,14 @@ class DiscHandler(QtCore.QObject):
 
 class Ripper(QtCore.QThread):
 
-    def __init__(self, dev, tracks, tmpdir, outdir, progress=None):
+    def __init__(
+        self,
+        dev: str,
+        metadata: metadata.CDMetaThread,
+        release: dict,
+        outdir: str,
+        progress=None,
+    ):
         """
         Arguments:
             dev (str): Dev device to rip from
@@ -216,8 +223,9 @@ class Ripper(QtCore.QThread):
         self._dead = False
         self.proc = None
         self.dev = dev
-        self.tracks = tracks
-        self.tmpdir = tmpdir
+        self.metadata = metadata
+        self.release = release
+        self.tmpdir = metadata.tmpdir
         self.outdir = outdir
         self.progress = progress
 
@@ -229,14 +237,15 @@ class Ripper(QtCore.QThread):
 
         """
 
+        tracks = self.metadata.parseRelease(self.release)
         if self.progress is not None:
             self.log.info('Emitting add disc signal')
-            self.progress.ADD_DISC.emit(self.dev, self.tracks)
+            self.progress.ADD_DISC.emit(self.dev, tracks)
 
         outdir = os.path.join(
             self.outdir,
-            self.tracks['album_info']['albumartist'],
-            self.tracks['album_info']['album'],
+            tracks['album_info']['albumartist'],
+            tracks['album_info']['album'],
         )
 
         self.proc = utils.cdparanoia(self.dev, self.tmpdir)
@@ -249,7 +258,7 @@ class Ripper(QtCore.QThread):
                 self.dev,
                 self.tmpdir,
                 outdir,
-                self.tracks,
+                tracks,
             )
 
         utils.cleanup(self.tmpdir)

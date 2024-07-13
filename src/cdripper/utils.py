@@ -50,7 +50,7 @@ def cdparanoia(dev, outdir):
     )
 
 
-def convert2FLAC(dev, srcdir, outdir, tracks):
+def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
     """
     Convert wav files ripped from CD to FLAC
 
@@ -84,7 +84,7 @@ def convert2FLAC(dev, srcdir, outdir, tracks):
         info = tracks.get(track_num, None)
         if info is None:
             log.error(
-                "Failed to get track info for track # %d; skipping it",
+                "Failed to get track info for track # %s; skipping it",
                 track_num,
             )
             os.remove(infile)
@@ -98,29 +98,34 @@ def convert2FLAC(dev, srcdir, outdir, tracks):
 
         # Iterate over key/value pairs in info, append tag option to command
         for key, val in info.items():
+            if key == 'short_title':
+                continue
             cmd.append(f'--tag={key}={val}')
 
         # Set basename for flac fil,e
-        outFile = '{:02d} - {}.flac'.format(
+        outfile = '{:02d} - {}.flac'.format(
             info['tracknumber'],
-            info['title'],
+            info['short_title'],
         )
 
         # If more than one disc in the release, prepend disc number
         if info['totaldiscs'] > 1:
-            outFile = '{:d}-{}'.format(info['discnumber'], outFile)
+            outfile = '{:d}-{}'.format(info['discnumber'], outfile)
 
         # Generate full file path
-        outFile = os.path.join(outdir, outFile)
+        outfile = os.path.join(outdir, outfile)
 
         # Append output-name option to flac command
-        cmd.append(f'--output-name={outFile}')
+        cmd.append(f'--output-name={outfile}')
 
         # Append input file to command
         cmd.append(infile)
 
         proc = Popen(cmd, stdout=DEVNULL, stderr=STDOUT)
         proc.wait()
+
+        if not os.path.isfile(outfile):
+            log.error("Failed to create file: %s", outfile)
 
     if coverart is not None:
         log.info("%s - Moving coverart", dev)

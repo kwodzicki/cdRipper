@@ -269,9 +269,19 @@ class CDMetaData(discid.Disc):
                 )
                 return []
 
+            short_title, long_title = self.get_title(track)
+            if short_title is None or long_title is None:
+                self.log.error(
+                    "Failed to get track title for track '%s' "
+                    "returning NO metadata!",
+                    i,
+                )
+                return []
+
             track = {
                 **album_info,
-                'title': track.get('recording', {}).get('title', ''),
+                'short_title': short_title,
+                'title': long_title,
                 'tracknumber': track_num,
                 'isrc': self.tracks[i].isrc,
                 'discid': self.id,
@@ -286,6 +296,47 @@ class CDMetaData(discid.Disc):
             tracks[str(track_num)] = track
 
         return tracks
+
+    def get_title(self, track: dict) -> str:
+
+        self.log.debug("Attempting to get title")
+        recording = track.get('recording', None)
+        if recording is None:
+            return None, None
+
+        short_title = orig_title = recording.get('title', '')
+        rid = recording.get('id', None)
+        if rid is None:
+            return short_title, orig_title
+
+        self.log.debug("Getting recording's related works")
+        try:
+            recording = musicbrainz.get_recording_by_id(
+                rid,
+                includes=['work-rels'],
+            )
+        except Exception as err:
+            self.log.error(
+                "Failed to get related works for recording: %s",
+                err,
+            )
+            return short_title, orig_title
+
+        relations = (
+            recording
+            .get('recording', {})
+            .get('work-relation-list', [])
+        )
+        for relation in relations:
+            work = relation.get('work', None)
+            if work is None:
+                continue
+            title = work.get('title', '')
+            if title not in short_title or len(title) >= len(short_title):
+                continue
+            short_title = title
+
+        return short_title, orig_title
 
     def filterReleases(self, releases):
 

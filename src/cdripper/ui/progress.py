@@ -226,7 +226,7 @@ class ProgressWidget(QtWidgets.QFrame):
         self.track_progs.append(0)
         info = self.info.get(title, {})
         if len(info) == 0:
-            self.log.error("Missing track info for track # %d", title)
+            self.log.error("Missing track info for track # %s", title)
 
         self.track.setText(
             f"{title} - {info.get('title', 'N/A')}",
