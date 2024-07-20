@@ -47,7 +47,7 @@ class ProgressDialog(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str, dict)
     def add_disc(self, dev: str, info: dict):
-        self.log.debug("Adding disc: %s", dev)
+        self.log.debug("%s - Disc addeds", dev)
         widget = ProgressWidget(dev, info)
         widget.CANCEL.connect(self.cancel)
 
@@ -58,7 +58,7 @@ class ProgressDialog(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str)
     def remove_disc(self, dev: str):
-        self.log.debug("Removing disc: %s", dev)
+        self.log.debug("%s - Disc removed", dev)
         widget = self.widgets.pop(dev, None)
         if widget is not None:
             self.layout.removeWidget(widget)
@@ -69,7 +69,7 @@ class ProgressDialog(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str, str)
     def current_track(self, dev: str, title: str):
-        self.log.debug("Setting current track: %s - %s", dev, title)
+        self.log.debug("%s - Setting current track: %s", dev, title)
         widget = self.widgets.get(dev, None)
         if widget is None:
             return
@@ -77,7 +77,7 @@ class ProgressDialog(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str, int)
     def track_size(self, dev, tsize):
-        self.log.debug("Update current track size: %s - %d", dev, tsize)
+        self.log.debug("%s - Update current track size: %d", dev, tsize)
         widget = self.widgets.get(dev, None)
         if widget is None:
             return
@@ -123,7 +123,9 @@ class ProgressWidget(QtWidgets.QFrame):
         vendor, model = get_vendor_model(dev)
 
         # Set up label for name of the drive disc is in
-        self.drive_name = QtWidgets.QLabel(f"{vendor} {model} : {dev}")
+        self.drive_name = QtWidgets.QLabel(
+            f"Device: {vendor} {model} [{dev}]",
+        )
 
         # Set up label for name of the artist
         self.artist_label = QtWidgets.QLabel("Artist:")
@@ -226,7 +228,11 @@ class ProgressWidget(QtWidgets.QFrame):
         self.track_progs.append(0)
         info = self.info.get(title, {})
         if len(info) == 0:
-            self.log.error("Missing track info for track # %s", title)
+            self.log.error(
+                "%s - Missing track info for track # %s",
+                self.dev,
+                title,
+            )
 
         self.track.setText(
             f"{title} - {info.get('title', 'N/A')}",

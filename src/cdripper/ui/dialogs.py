@@ -106,6 +106,7 @@ class SelectDisc(QtWidgets.QDialog):
         self, dev: str,
         releases: list[dict],
         timeout: int | float = 30,
+        name: str = NAME,
         parent=None,
     ):
         super().__init__(parent)
@@ -113,6 +114,7 @@ class SelectDisc(QtWidgets.QDialog):
         self.log = logging.getLogger(__name__)
         self.dev = dev
         self._timeout = timeout
+        self._name = name
 
         qbtn = (
             QtWidgets.QDialogButtonBox.Save
@@ -164,7 +166,7 @@ class SelectDisc(QtWidgets.QDialog):
 
         # Set up widget title
         vendor, model = utils.get_vendor_model(self.dev)
-        self.setWindowTitle(f"{NAME} - {vendor} {model}")
+        self.setWindowTitle(f"{self._name} - {vendor} {model}")
 
         # Set timeout timer
         self._timer = QtCore.QTimer()
@@ -265,12 +267,13 @@ class SubmitDisc(QtWidgets.QDialog):
 
     FINISHED = QtCore.pyqtSignal(str)
 
-    def __init__(self, dev: str, url: str, parent=None):
+    def __init__(self, dev: str, url: str, name=NAME, parent=None):
         super().__init__(parent)
 
         self.log = logging.getLogger(__name__)
         self.dev = dev
         self.url = url
+        self._name = name
 
         # Set up botton (with icon) to trigger open of URL in browser
         self.icon = QtGui.QIcon.fromTheme("media-optical")
@@ -311,6 +314,9 @@ class SubmitDisc(QtWidgets.QDialog):
         )
         layout.addWidget(self.ignore_button)
         self.setLayout(layout)
+
+        vendor, model = utils.get_vendor_model(self.dev)
+        self.setWindowTitle(f"{self._name} - {vendor} {model}")
 
         self.show()
 

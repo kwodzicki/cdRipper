@@ -239,7 +239,6 @@ class Ripper(QtCore.QThread):
 
         tracks = self.metadata.parseRelease(self.release)
         if self.progress is not None:
-            self.log.info('Emitting add disc signal')
             self.progress.ADD_DISC.emit(self.dev, tracks)
 
         outdir = os.path.join(
@@ -264,6 +263,8 @@ class Ripper(QtCore.QThread):
         utils.cleanup(self.tmpdir)
 
         subprocess.call(['eject', self.dev])
+
+        self.log.info("%s - Ripper thread finished", self.dev)
 
     @QtCore.pyqtSlot(str)
     def terminate(self, dev: str):
