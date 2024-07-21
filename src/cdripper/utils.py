@@ -112,6 +112,9 @@ def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
         if info['totaldiscs'] > 1:
             outfile = '{:d}-{}'.format(info['discnumber'], outfile)
 
+        # Replace path seperator with under score
+        outfile = outfile.replace(os.sep, '_')
+
         # Generate full file path
         outfile = os.path.join(outdir, outfile)
 

@@ -10,6 +10,7 @@ from .. import NAME
 from . import utils
 
 # Codes for what to do
+SUBMIT = 3
 SUBMITTED = 2
 RIP = 1
 IGNORE = 0
@@ -103,7 +104,8 @@ class SelectDisc(QtWidgets.QDialog):
     FINISHED = QtCore.pyqtSignal(str, int, dict)
 
     def __init__(
-        self, dev: str,
+        self,
+        dev: str,
         releases: list[dict],
         timeout: int | float = 30,
         name: str = NAME,
@@ -113,6 +115,7 @@ class SelectDisc(QtWidgets.QDialog):
 
         self.log = logging.getLogger(__name__)
         self.dev = dev
+
         self._timeout = timeout
         self._name = name
 
@@ -121,7 +124,14 @@ class SelectDisc(QtWidgets.QDialog):
             | QtWidgets.QDialogButtonBox.Ignore
         )
         self.button_box = QtWidgets.QDialogButtonBox(qbtn)
-        self.button_box.addButton('Wait', QtWidgets.QDialogButtonBox.HelpRole)
+        self.button_box.addButton(
+            'Wait',
+            QtWidgets.QDialogButtonBox.HelpRole,
+        )
+        self.button_box.addButton(
+            'New Release',
+            QtWidgets.QDialogButtonBox.ActionRole,
+        )
         self.button_box.clicked.connect(self.action)
 
         message = (
@@ -131,6 +141,7 @@ class SelectDisc(QtWidgets.QDialog):
             "Would you like to:\n\n"
             "\tWait: I need more time; disable timeout\n"
             "\tSave: Use highlight release for metadata\n"
+            "\tNew Release: If you do not see a matching release, create one\n"
             "\tIgnore: Ignore the disc and do nothing?\n"
         )
 
@@ -218,6 +229,10 @@ class SelectDisc(QtWidgets.QDialog):
         role = self.button_box.buttonRole(button)
         if role == QtWidgets.QDialogButtonBox.HelpRole:
             self.timeout_label.setText('')
+            return
+
+        if role == QtWidgets.QDialogButtonBox.ActionRole:
+            self.done(SUBMIT)
             return
 
         # If is the Save button, then signal rip and return

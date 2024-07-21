@@ -66,7 +66,7 @@ class DiscHandler(QtCore.QObject):
             self.ripper.terminate()
             self.ripper = None
 
-    def submit_discid(self, dev: str, submit_url: str):
+    def submit_discid(self, dev: str, force: bool = False):
         """
         Submit a discid to musicbrainz
 
@@ -75,17 +75,23 @@ class DiscHandler(QtCore.QObject):
 
         Arguments:
             dev (str): Dev device discid was run on
-            submit_url (str): URL used to submit the disc ID to MusicBrainz
 
         """
 
         if dev != self.dev:
             return
 
-        self.submitter = dialogs.SubmitDisc(dev, submit_url)
-        self.submitter.FINISHED.connect(self.disc_lookup)
+        if self.metadata is None:
+            self.log.info("%s - Metadata not yet defined", dev)
+            return
 
-    def select_release(self, dev: str, releases: list[dict]):
+        self.submitter = dialogs.SubmitDisc(dev, self.metadata.submission_url)
+        self.submitter.FINISHED.connect(self.disc_lookup)
+        # If force, then trigger submit method
+        if force:
+            self.submitter.submit()
+
+    def select_release(self, dev: str) -> None:
         """
         Dialog to select release for disc
 
@@ -98,14 +104,20 @@ class DiscHandler(QtCore.QObject):
 
         Arguments:
             dev (str): Device dics is mount in
-            releases (list): List of releases that match the disc id
 
         """
 
         if dev != self.dev:
             return
 
-        self.selector = dialogs.SelectDisc(dev, releases)
+        if self.metadata is None:
+            self.log.info("%s - Metadata not yet defined", dev)
+            return
+
+        self.selector = dialogs.SelectDisc(
+            dev,
+            self.metadata.result,
+        )
         self.selector.FINISHED.connect(self.rip_disc)
 
     @QtCore.pyqtSlot(str)
@@ -160,10 +172,10 @@ class DiscHandler(QtCore.QObject):
             return
 
         if isinstance(self.metadata.result, str):
-            self.submit_discid(dev, self.metadata.result)
+            self.submit_discid(dev)
             return
 
-        self.select_release(dev, self.metadata.result)
+        self.select_release(dev)
 
     @QtCore.pyqtSlot(str, int, dict)
     def rip_disc(self, dev: str, result: int, release: dict) -> None:
@@ -182,6 +194,10 @@ class DiscHandler(QtCore.QObject):
             return
 
         if result == dialogs.IGNORE:
+            return
+
+        if result == dialogs.SUBMIT:
+            self.submit_discid(dev, self.metadata.result)
             return
 
         if self.metadata is None:
@@ -241,10 +257,11 @@ class Ripper(QtCore.QThread):
         if self.progress is not None:
             self.progress.ADD_DISC.emit(self.dev, tracks)
 
+        # Replace path seperator with under score
         outdir = os.path.join(
             self.outdir,
-            tracks['album_info']['albumartist'],
-            tracks['album_info']['album'],
+            tracks['album_info']['albumartist'].replace(os.sep, '_'),
+            tracks['album_info']['album'].replace(os.sep, '_'),
         )
 
         self.proc = utils.cdparanoia(self.dev, self.tmpdir)

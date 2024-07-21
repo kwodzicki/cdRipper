@@ -52,6 +52,7 @@ class CDMetaThread(QThread):
         self.metadata = None
         self.tmpdir = None
         self.result = None
+        self.submission_url = None
 
     def run(self):
         """
@@ -72,6 +73,8 @@ class CDMetaThread(QThread):
 
         # Search for releases
         self.result = self.metadata.searchMusicBrainz()
+        self.submission_url = self.metadata.submission_url
+
         self.log.info("%s - Search finished", self.dev)
 
         # Emit custom finished signal
