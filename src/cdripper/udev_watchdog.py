@@ -14,6 +14,7 @@ from .ripper import DiscHandler
 
 KEY = 'DEVNAME'
 CHANGE = 'DISK_MEDIA_CHANGE'
+CDTYPE = "ID_CDROM"
 STATUS = "ID_CDROM_MEDIA_STATE"
 EJECT = "DISK_EJECT_REQUEST"  # This appears when initial eject requested
 READY = "SYSTEMD_READY"  # This appears when disc tray is out
@@ -142,6 +143,11 @@ class UdevWatchdog(QtCore.QThread):
             # Get value for KEY. If is None, then did not exist, so continue
             dev = device.properties.get(KEY, None)
             if dev is None:
+                continue
+
+            # Every optical drive should support CD, so check if the device
+            # has the CDTYPE flag, if not we ignore it 
+            if device.properties.get(CDTYPE, '') != '1':
                 continue
 
             if device.properties.get(EJECT, ''):

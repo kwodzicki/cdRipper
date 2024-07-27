@@ -63,7 +63,7 @@ class DiscHandler(QtCore.QObject):
             self.submitter.close()
             self.submitter = None
         if self.ripper is not None:
-            self.ripper.terminate()
+            self.ripper.terminate(self.dev)
             self.ripper = None
 
     def submit_discid(self, dev: str, force: bool = False):

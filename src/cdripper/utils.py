@@ -109,8 +109,9 @@ def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
         )
 
         # If more than one disc in the release, prepend disc number
-        if info['totaldiscs'] > 1:
-            outfile = '{:d}-{}'.format(info['discnumber'], outfile)
+        totaldiscs = info.get('totaldiscs', 1)
+        if totaldiscs > 1:
+            outfile = f"{totaldiscs:d}-{outfile}"
 
         # Replace path seperator with under score
         outfile = outfile.replace(os.sep, '_')
@@ -132,9 +133,12 @@ def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
 
     if coverart is not None:
         log.info("%s - Moving coverart", dev)
+        fname = os.path.basename(coverart)
+        if totaldiscs > 1:
+            fname = f"{totaldiscs:d}-{fname}"
         os.rename(
             coverart,
-            os.path.join(outdir, os.path.basename(coverart)),
+            os.path.join(outdir, fname),
         )
 
     return True
