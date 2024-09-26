@@ -146,7 +146,7 @@ class UdevWatchdog(QtCore.QThread):
                 continue
 
             # Every optical drive should support CD, so check if the device
-            # has the CDTYPE flag, if not we ignore it 
+            # has the CDTYPE flag, if not we ignore it
             if device.properties.get(CDTYPE, '') != '1':
                 continue
 

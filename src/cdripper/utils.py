@@ -125,6 +125,7 @@ def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
         # Append input file to command
         cmd.append(infile)
 
+        log.debug("Running 'flac' command: %s", cmd)
         proc = Popen(cmd, stdout=DEVNULL, stderr=STDOUT)
         proc.wait()
 

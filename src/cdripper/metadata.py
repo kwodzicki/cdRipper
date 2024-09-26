@@ -73,7 +73,15 @@ class CDMetaThread(QThread):
 
         # Search for releases
         self.result = self.metadata.searchMusicBrainz()
-        self.submission_url = self.metadata.submission_url
+        try:
+            self.submission_url = self.metadata.submission_url
+        except AssertionError as err:
+            self.log.error(
+                "%s - Failed to get submission_url; is this a CD? '%s'",
+                self.dev,
+                err,
+            )
+            self.FINISHED.emit(f'ERROR-{self.dev}')
 
         self.log.info("%s - Search finished", self.dev)
 
