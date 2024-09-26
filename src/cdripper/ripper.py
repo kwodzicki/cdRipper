@@ -172,6 +172,7 @@ class DiscHandler(QtCore.QObject):
         # If there was an error; eject the drive
         if error:
             subprocess.call(['eject', self.dev])
+            return
 
         self.log.info("%s - Running select release", dev)
         if self.metadata is None:
