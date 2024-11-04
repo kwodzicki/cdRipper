@@ -188,8 +188,14 @@ class DiscHandler(QtCore.QObject):
 
         self.select_release(dev)
 
-    @QtCore.pyqtSlot(str, int, dict)
-    def rip_disc(self, dev: str, result: int, release: dict) -> None:
+    @QtCore.pyqtSlot(str, int, bool, dict)
+    def rip_disc(
+        self,
+        dev: str,
+        result: int,
+        media_label: bool,
+        release: dict,
+    ) -> None:
         """
         Attempt disc rip
 
@@ -219,6 +225,7 @@ class DiscHandler(QtCore.QObject):
             self.metadata,
             release,
             self.outdir,
+            media_label=media_label,
             progress=self.progress_dialog,
         )
         self.ripper.start()
@@ -232,6 +239,7 @@ class Ripper(QtCore.QThread):
         metadata: metadata.CDMetaThread,
         release: dict,
         outdir: str,
+        media_label: bool = False,
         progress=None,
     ):
         """
@@ -242,6 +250,9 @@ class Ripper(QtCore.QThread):
             tmpdir (str): Temporary directory to rip files to
             outdir (str): Directory to put tagged FLAC files in
 
+        Keyword Arguments:
+            media_label (bool): If set, use the media label over the title
+                of the album. Can be useful for multidisc collections
         """
 
         super().__init__()
@@ -254,6 +265,7 @@ class Ripper(QtCore.QThread):
         self.release = release
         self.tmpdir = metadata.tmpdir
         self.outdir = outdir
+        self.media_label = media_label
         self.progress = progress
 
         self.progress.CANCEL.connect(self.terminate)
@@ -269,10 +281,15 @@ class Ripper(QtCore.QThread):
             self.progress.ADD_DISC.emit(self.dev, tracks)
 
         # Replace path seperator with under score
+        album_artist = tracks['album_info'].get('albumartist', 'Unknown')
+        album_title = tracks['album_info'].get('album', 'Unknown')
+        if self.media_label:
+            album_title = tracks['album_info'].get('album_medium', album_title)
+
         outdir = os.path.join(
             self.outdir,
-            tracks['album_info']['albumartist'].replace(os.sep, '_'),
-            tracks['album_info']['album'].replace(os.sep, '_'),
+            album_artist.replace(os.sep, '_'),
+            album_title.replace(os.sep, '_'),
         )
 
         self.proc = utils.cdparanoia(self.dev, self.tmpdir)
@@ -286,6 +303,7 @@ class Ripper(QtCore.QThread):
                 self.tmpdir,
                 outdir,
                 tracks,
+                media_label=self.media_label,
             )
 
         utils.cleanup(self.tmpdir)

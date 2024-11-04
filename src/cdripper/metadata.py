@@ -257,6 +257,7 @@ class CDMetaData(discid.Disc):
             'artist': release.get('artist-credit-phrase', ''),
             'albumartist': release.get('artist-credit-phrase', ''),
             'album': release.get('title', ''),
+            'album_medium': release.get('medium-list', {}).get('title', ''),
             'totaltracks': int(
                 release.get('medium-list', {}).get('track-count', '0')
             ),

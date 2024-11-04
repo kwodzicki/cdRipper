@@ -50,7 +50,13 @@ def cdparanoia(dev, outdir):
     )
 
 
-def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
+def convert2FLAC(
+    dev: str,
+    srcdir: str,
+    outdir: str,
+    tracks: dict,
+    media_label: bool = False,
+) -> bool:
     """
     Convert wav files ripped from CD to FLAC
 
@@ -111,7 +117,8 @@ def convert2FLAC(dev: str, srcdir: str, outdir: str, tracks: dict):
         # If more than one disc in the release, prepend disc number
         totaldiscs = info.get('totaldiscs', 1)
         if totaldiscs > 1:
-            outfile = f"{totaldiscs:d}-{outfile}"
+            discnum = info.get('discnumber', 1)
+            outfile = f"{discnum:d}-{outfile}"
 
         # Replace path seperator with under score
         outfile = outfile.replace(os.sep, '_')

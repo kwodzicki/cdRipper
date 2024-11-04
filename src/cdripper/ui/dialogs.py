@@ -101,7 +101,7 @@ class SelectDisc(QtWidgets.QDialog):
     """
 
     # Return dev, code, release information
-    FINISHED = QtCore.pyqtSignal(str, int, dict)
+    FINISHED = QtCore.pyqtSignal(str, int, bool, dict)
 
     def __init__(
         self,
@@ -119,6 +119,12 @@ class SelectDisc(QtWidgets.QDialog):
         self._timeout = timeout
         self._name = name
 
+        # If check, will use media title over title
+        self.media_label_checkbox = QtWidgets.QCheckBox(
+            'Use Media Label',
+        )
+
+        # Set up 'action' buttons at bottom of dialog
         qbtn = (
             QtWidgets.QDialogButtonBox.Save
             | QtWidgets.QDialogButtonBox.Ignore
@@ -171,6 +177,7 @@ class SelectDisc(QtWidgets.QDialog):
         )
         layout.addWidget(self.timeout_label)
         layout.addWidget(self.table)
+        layout.addWidget(self.media_label_checkbox)
         layout.addWidget(self.button_box)
 
         self.setLayout(layout)
@@ -263,7 +270,12 @@ class SelectDisc(QtWidgets.QDialog):
             release = self.model.releases[row]
 
         # Emit signal
-        self.FINISHED.emit(self.dev, self.result(), release)
+        self.FINISHED.emit(
+            self.dev,
+            self.result(),
+            self.media_label_checkbox.isChecked(),
+            release,
+        )
 
 
 class SubmitDisc(QtWidgets.QDialog):
