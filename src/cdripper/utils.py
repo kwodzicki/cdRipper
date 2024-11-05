@@ -140,13 +140,14 @@ def convert2FLAC(
             log.error("Failed to create file: %s", outfile)
 
     if coverart is not None:
-        log.info("%s - Moving coverart", dev)
         fname = os.path.basename(coverart)
         if totaldiscs > 1:
-            fname = f"{totaldiscs:d}-{fname}"
+            fname = f"{discnum:d}-{fname}"
+        dst = os.path.join(outdir, fname)
+        log.info("%s - Moving coverart: %s --> %s", dev, coverart, dst)
         os.rename(
             coverart,
-            os.path.join(outdir, fname),
+            dst,
         )
 
     return True
