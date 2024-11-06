@@ -172,7 +172,7 @@ def cdparanoia_progress(dev, proc, progress):
             search = re.search(CURRENT, line)
             if search is not None:
                 current = str(int(search.group(1)))
-                progress.CUR_TRACK.emit(dev, current)
+                progress.CD_CUR_TRACK.emit(dev, current)
                 break
 
             pos_size = parse_progress_line(line)
@@ -182,15 +182,15 @@ def cdparanoia_progress(dev, proc, progress):
             pos, size = pos_size
             if pos != prog:
                 prog = pos
-                progress.TRACK_SIZE.emit(
+                progress.CD_TRACK_SIZE.emit(
                     dev,
                     round(pos / size * 100)
                 )
 
             line = proc.stdout.readline().strip()
 
-    progress.TRACK_SIZE.emit(dev, 100)
-    progress.REMOVE_DISC.emit(dev)
+    progress.CD_TRACK_SIZE.emit(dev, 100)
+    progress.CD_REMOVE_DISC.emit(dev)
 
 
 def parse_progress_line(line):

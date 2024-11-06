@@ -278,7 +278,7 @@ class Ripper(QtCore.QThread):
 
         tracks = self.metadata.parseRelease(self.release)
         if self.progress is not None:
-            self.progress.ADD_DISC.emit(self.dev, tracks)
+            self.progress.CD_ADD_DISC.emit(self.dev, tracks)
 
         # Replace path seperator with under score
         album_artist = tracks['album_info'].get('albumartist', 'Unknown')

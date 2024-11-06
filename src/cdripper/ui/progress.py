@@ -10,13 +10,13 @@ from .utils import get_vendor_model
 class ProgressDialog(QtWidgets.QWidget):
 
     # First arg in dev, second is all info
-    ADD_DISC = QtCore.pyqtSignal(str, dict)
+    CD_ADD_DISC = QtCore.pyqtSignal(str, dict)
     # Arg is dev of disc to remove
-    REMOVE_DISC = QtCore.pyqtSignal(str)
+    CD_REMOVE_DISC = QtCore.pyqtSignal(str)
     # First arg is dev, second is track num
-    CUR_TRACK = QtCore.pyqtSignal(str, str)
+    CD_CUR_TRACK = QtCore.pyqtSignal(str, str)
     # First arg is dev, second is size of cur track
-    TRACK_SIZE = QtCore.pyqtSignal(str, int)
+    CD_TRACK_SIZE = QtCore.pyqtSignal(str, int)
     # dev of the rip to cancel
     CANCEL = QtCore.pyqtSignal(str)
 
@@ -37,16 +37,16 @@ class ProgressDialog(QtWidgets.QWidget):
         self.layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.ADD_DISC.connect(self.add_disc)
-        self.REMOVE_DISC.connect(self.remove_disc)
-        self.CUR_TRACK.connect(self.current_track)
-        self.TRACK_SIZE.connect(self.track_size)
+        self.CD_ADD_DISC.connect(self.cd_add_disc)
+        self.CD_REMOVE_DISC.connect(self.cd_remove_disc)
+        self.CD_CUR_TRACK.connect(self.cd_current_track)
+        self.CD_TRACK_SIZE.connect(self.cd_track_size)
 
     def __len__(self):
         return len(self.widgets)
 
     @QtCore.pyqtSlot(str, dict)
-    def add_disc(self, dev: str, info: dict):
+    def cd_add_disc(self, dev: str, info: dict):
         self.log.debug("%s - Disc addeds", dev)
         widget = ProgressWidget(dev, info)
         widget.CANCEL.connect(self.cancel)
@@ -57,36 +57,36 @@ class ProgressDialog(QtWidgets.QWidget):
         self.adjustSize()
 
     @QtCore.pyqtSlot(str)
-    def remove_disc(self, dev: str):
-        self.log.debug("%s - Disc removed", dev)
+    def cd_remove_disc(self, dev: str):
         widget = self.widgets.pop(dev, None)
         if widget is not None:
             self.layout.removeWidget(widget)
             widget.deleteLater()
+            self.log.debug("%s - Disc removed", dev)
         if len(self.widgets) == 0:
             self.setVisible(False)
         self.adjustSize()
 
     @QtCore.pyqtSlot(str, str)
-    def current_track(self, dev: str, title: str):
-        self.log.debug("%s - Setting current track: %s", dev, title)
+    def cd_current_track(self, dev: str, title: str):
         widget = self.widgets.get(dev, None)
         if widget is None:
             return
+        self.log.debug("%s - Setting current track: %s", dev, title)
         widget.current_track(title)
 
     @QtCore.pyqtSlot(str, int)
-    def track_size(self, dev, tsize):
-        self.log.debug("%s - Update current track size: %d", dev, tsize)
+    def cd_track_size(self, dev, tsize):
         widget = self.widgets.get(dev, None)
         if widget is None:
             return
+        self.log.debug("%s - Update current track size: %d", dev, tsize)
         widget.track_size(tsize)
 
     @QtCore.pyqtSlot(str)
     def cancel(self, dev):
         self.CANCEL.emit(dev)
-        self.REMOVE_DISC.emit(dev)
+        self.CD_REMOVE_DISC.emit(dev)
 
 
 class ProgressWidget(QtWidgets.QFrame):
