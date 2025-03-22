@@ -516,6 +516,12 @@ class MyTableModel(QtCore.QAbstractTableModel):
             return ""
 
     def columnCount(self, parent=None):
+        if not isinstance(self.data, list):
+            return 0
+
+        if len(self.data) == 0:
+            return 0
+
         return len(self.data[0])
 
     def rowCount(self, parent=None):
