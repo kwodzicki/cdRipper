@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdripper"
-version = "3.0.0"
+version = "3.0.1"
 description = "Package for automagically rip and tag CDs when inserted"
 readme = "README.md"
 authors = [
@@ -47,4 +47,4 @@ cdripper = "cdripper.ui.main:cli"
 where = ["src"]
 
 [tool.setuptools.package-data]
-automakemkv = ['resources/*.png', 'resources/*.ico']
+cdripper = ['resources/*.png', 'resources/*.ico']
