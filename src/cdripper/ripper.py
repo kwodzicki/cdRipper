@@ -5,7 +5,6 @@ Utilities for ripping titles
 
 import logging
 import os
-import subprocess
 from PyQt5 import QtCore
 
 from . import utils
@@ -19,19 +18,30 @@ class DiscHandler(QtCore.QObject):
 
     """
 
-    def __init__(self, dev: str, outdir=None, progress_dialog=None):
+    FINISHED = QtCore.pyqtSignal()
+    EJECT_DISC = QtCore.pyqtSignal()
+
+    DISC_LOOKUP = QtCore.pyqtSignal(str)
+    SELECT_RELEASE = QtCore.pyqtSignal(str)
+    SUBMIT_DISCID = QtCore.pyqtSignal(str, bool)
+
+    def __init__(self, dev: str, progress, outdir: str | None = None):
         super().__init__()
         self.log = logging.getLogger(__name__)
+        self.DISC_LOOKUP.connect(self.disc_lookup)
+        self.SELECT_RELEASE.connect(self.select_release)
+        self.SUBMIT_DISCID.connect(self.submit_discid)
+
         self.dev = dev
         self.outdir = outdir
-        self.progress_dialog = progress_dialog
+        self.progress = progress
 
         self.metadata = None
         self.selector = None
         self.submitter = None
         self.ripper = None
 
-        self.disc_lookup(self.dev)
+        self.DISC_LOOKUP.emit(self.dev)
 
     def isRunning(self):
         """
@@ -47,25 +57,31 @@ class DiscHandler(QtCore.QObject):
         # Else, return status of the ripper
         return self.ripper.isRunning()
 
-    def terminate(self):
+    @QtCore.pyqtSlot(str)
+    def cancel(self, dev: str) -> None:
         """
         Kill/close all objects
 
         """
 
+        if dev != self.dev:
+            return
+
         if self.metadata is not None:
-            self.metadata.terminate()
+            self.metadata.deleteLater()
             self.metadata = None
         if self.selector is not None:
             self.selector.close()
+            self.selector.deleteLater()
             self.selector = None
         if self.submitter is not None:
             self.submitter.close()
+            self.submitter.deleteLater()
             self.submitter = None
         if self.ripper is not None:
-            self.ripper.terminate(self.dev)
-            self.ripper = None
+            self.ripper.CANCEL.emit(self.dev)
 
+    @QtCore.pyqtSlot(str, bool)
     def submit_discid(self, dev: str, force: bool = False):
         """
         Submit a discid to musicbrainz
@@ -91,6 +107,7 @@ class DiscHandler(QtCore.QObject):
         if force:
             self.submitter.submit()
 
+    @QtCore.pyqtSlot(str)
     def select_release(self, dev: str) -> None:
         """
         Dialog to select release for disc
@@ -136,6 +153,7 @@ class DiscHandler(QtCore.QObject):
 
         # If empty dev device name, then we are ignorning
         if dev == '':
+            self.FINISHED.emit()
             return
 
         if dev != self.dev:
@@ -167,26 +185,30 @@ class DiscHandler(QtCore.QObject):
 
         # If dev does not match dev of class; dump out
         if dev != self.dev:
+            self.FINISHED.emit()
             return
 
         # If there was an error; eject the drive
         if error:
-            subprocess.call(['eject', self.dev])
+            self.EJECT_DISC.emit()
+            self.FINISHED.emit()
             return
 
         self.log.info("%s - Running select release", dev)
         if self.metadata is None:
+            self.FINISHED.emit()
             return
 
         if self.metadata.result is None:
             self.log.info("%s - No metadata found for disc", dev)
+            self.FINISHED.emit()
             return
 
         if isinstance(self.metadata.result, str):
-            self.submit_discid(dev)
+            self.SUBMIT_DISCID.emit(dev, False)
             return
 
-        self.select_release(dev)
+        self.SELECT_RELEASE.emit(dev)
 
     @QtCore.pyqtSlot(str, int, bool, dict)
     def rip_disc(
@@ -214,7 +236,7 @@ class DiscHandler(QtCore.QObject):
             return
 
         if result == dialogs.SUBMIT:
-            self.submit_discid(dev, self.metadata.result)
+            self.SUBMIT_DISCID.emit(dev, self.metadata.result)
             return
 
         if self.metadata is None:
@@ -225,13 +247,19 @@ class DiscHandler(QtCore.QObject):
             self.metadata,
             release,
             self.outdir,
+            self.progress,
             media_label=media_label,
-            progress=self.progress_dialog,
         )
+        self.ripper.FINISHED.connect(self.FINISHED.emit)
+        self.ripper.EJECT_DISC.connect(self.EJECT_DISC.emit)
         self.ripper.start()
 
 
 class Ripper(QtCore.QThread):
+
+    CANCEL = QtCore.pyqtSignal(str)
+    FINISHED = QtCore.pyqtSignal()
+    EJECT_DISC = QtCore.pyqtSignal()
 
     def __init__(
         self,
@@ -239,8 +267,8 @@ class Ripper(QtCore.QThread):
         metadata: metadata.CDMetaThread,
         release: dict,
         outdir: str,
+        progress,
         media_label: bool = False,
-        progress=None,
     ):
         """
         Arguments:
@@ -268,7 +296,7 @@ class Ripper(QtCore.QThread):
         self.media_label = media_label
         self.progress = progress
 
-        self.progress.CANCEL.connect(self.terminate)
+        self.progress.CANCEL.connect(self.cancel)
 
     def run(self):
         """
@@ -277,8 +305,7 @@ class Ripper(QtCore.QThread):
         """
 
         tracks = self.metadata.parseRelease(self.release)
-        if self.progress is not None:
-            self.progress.CD_ADD_DISC.emit(self.dev, tracks)
+        self.progress.CD_ADD_DISC.emit(self.dev, tracks)
 
         # Replace path seperator with under score
         album_artist = tracks['album_info'].get('albumartist', 'Unknown')
@@ -293,10 +320,11 @@ class Ripper(QtCore.QThread):
         )
 
         self.proc = utils.cdparanoia(self.dev, self.tmpdir)
-        if self.progress is not None:
-            utils.cdparanoia_progress(self.dev, self.proc, self.progress)
-
+        utils.cdparanoia_progress(self.dev, self.proc, self.progress)
         _ = self.proc.communicate()
+
+        self.EJECT_DISC.emit()
+
         if self.proc.returncode == 0:
             self.status = utils.convert2FLAC(
                 self.dev,
@@ -308,12 +336,11 @@ class Ripper(QtCore.QThread):
 
         utils.cleanup(self.tmpdir)
 
-        subprocess.call(['eject', self.dev])
-
         self.log.info("%s - Ripper thread finished", self.dev)
+        self.FINISHED.emit()
 
     @QtCore.pyqtSlot(str)
-    def terminate(self, dev: str):
+    def cancel(self, dev: str):
         if dev != self.dev:
             return
 
