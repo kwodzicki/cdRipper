@@ -83,8 +83,10 @@ class ProgressDialog(QtWidgets.QWidget):
         self.log.debug("%s - Update current track size: %d", dev, tsize)
         widget.track_size(tsize)
 
-    @QtCore.pyqtSlot(str)
-    def cancel(self, dev):
+    @QtCore.pyqtSlot()
+    def cancel(self):
+        dev = self.sender().dev
+        self.log.info("%s - Emitting cancel event", dev)
         self.CANCEL.emit(dev)
         self.CD_REMOVE_DISC.emit(dev)
 
@@ -99,7 +101,7 @@ class ProgressWidget(QtWidgets.QFrame):
 
     """
 
-    CANCEL = QtCore.pyqtSignal(str)  # dev to cancel rip of
+    CANCEL = QtCore.pyqtSignal()  # dev to cancel rip of
 
     def __init__(self, dev: str, info: dict):
         super().__init__()
@@ -205,7 +207,7 @@ class ProgressWidget(QtWidgets.QFrame):
             message.Yes | message.No,
         )
         if res == message.Yes:
-            self.CANCEL.emit(self.dev)
+            self.CANCEL.emit()
 
     def current_track(self, title: str):
         """

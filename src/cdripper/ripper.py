@@ -35,6 +35,7 @@ class DiscHandler(QtCore.QObject):
         self.dev = dev
         self.outdir = outdir
         self.progress = progress
+        self.progress.CANCEL.connect(self.cancel)
 
         self.metadata = None
         self.selector = None

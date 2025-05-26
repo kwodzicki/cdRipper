@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdripper"
-version = "3.0.2"
+version = "3.1.0"
 description = "Package for automagically rip and tag CDs when inserted"
 readme = "README.md"
 authors = [
