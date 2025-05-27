@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdripper"
-version = "2.0.1"
+version = "3.2.1"
 description = "Package for automagically rip and tag CDs when inserted"
 readme = "README.md"
 authors = [
@@ -15,7 +15,8 @@ authors = [
 ]
 
 classifiers = [
-    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.10",
@@ -29,8 +30,10 @@ requires-python = ">=3.10"
 dependencies = [
     "PyQt5",
     "discid",
-    "pyudev",
     "musicbrainzngs",
+    "pyudev ; platform_system == 'Linux'",
+    "pywin32 ; platform_system == 'Windows'",
+    "WMI ; platform_system == 'Windows'",
 ]
 
 [project.urls]
@@ -43,3 +46,5 @@ cdripper = "cdripper.ui.main:cli"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cdripper = ['resources/*.png', 'resources/*.ico']

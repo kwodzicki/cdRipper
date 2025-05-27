@@ -48,15 +48,14 @@ class MissingOutdirDialog(QtWidgets.QDialog):
         self.setLayout(self.layout)
 
 
-class SettingsWidget(QtWidgets.QDialog):
+class SettingsDialog(QtWidgets.QDialog):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.outdir = PathSelector('Output Location:')
+        layout = QtWidgets.QVBoxLayout()
 
-        self.set_settings()
-
+        self.widget = SettingsWidget()
         buttons = (
             QtWidgets.QDialogButtonBox.Save
             | QtWidgets.QDialogButtonBox.Cancel
@@ -65,23 +64,47 @@ class SettingsWidget(QtWidgets.QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
 
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.outdir)
+        layout.addWidget(self.widget)
         layout.addWidget(button_box)
+
         self.setLayout(layout)
 
-    def set_settings(self):
+        self.set_settings()
 
-        settings = utils.load_settings()
+    def set_settings(self):
+        self.widget.set_settings()
+
+    def get_settings(self):
+        return self.widget.get_settings()
+
+
+class SettingsWidget(QtWidgets.QWidget):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.outdir = PathSelector('Output Location:')
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.outdir)
+        self.setLayout(layout)
+
+    def set_settings(self, settings: dict | None = None):
+
+        if settings is None:
+            settings = utils.load_settings()
+
         if 'outdir' in settings:
             self.outdir.setText(settings['outdir'])
 
-    def get_settings(self):
+    def get_settings(self, save: bool = True):
 
         settings = {
             'outdir': self.outdir.getText(),
         }
-        utils.save_settings(settings)
+        if save:
+            utils.save_settings(settings)
+
         return settings
 
 

@@ -1,18 +1,63 @@
 import logging
 from logging.handlers import RotatingFileHandler
+
 import os
+import sys
+import shutil
 from importlib.metadata import metadata as pkg_metadata
 
 NAME = 'cdRipper'
 
+RESOURCES = os.path.join(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    ),
+    'resources',
+)
+
 HOMEDIR = os.path.expanduser('~')
 OUTDIR = os.path.join(HOMEDIR, 'Music')
-APPDIR = os.path.join(
-    HOMEDIR,
-    'Library',
-    'Application Support',
-    __name__,
-)
+
+TRAY_ICON = os.path.join(RESOURCES, "tray_icon.png")
+if sys.platform.startswith('linux'):
+    APPDIR = os.path.join(
+        HOMEDIR,
+        'Library',
+        'Application Support',
+        __name__,
+    )
+    CDPARANOIA = shutil.which('cdparanoia')
+    FLAC = shutil.which('flac')
+    APP_ICON = os.path.join(RESOURCES, "app_icon_linux.png")
+# Code for windows when get around to it
+# elif sys.platform.startswith('win'):
+#     APPDIR = os.path.join(
+#         HOMEDIR,
+#         'AppData',
+#         'Local',
+#         __name__,
+#     )
+#     SEARCH_DIRS = [
+#         os.environ.get("ProgramFiles", r"C:\Program Files"),
+#         os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+#         os.environ.get("LOCALAPPDATA", r"C:\Users\%USERNAME%\AppData\Local"),
+#         os.environ.get("ProgramData", r"C:\ProgramData"),
+#     ]
+#     path = os.pathsep.join(
+#         [os.path.join(root, 'MakeMKV') for root in SEARCH_DIRS]
+#     )
+#     MAKEMKVCON = shutil.which('makemkvcon64', path=path)
+#
+#     path = os.pathsep.join(
+#         [os.path.join(root, 'MKVToolNix') for root in SEARCH_DIRS]
+#     )
+#     MKVMERGE = shutil.which('mkvmerge', path=path)
+#     APP_ICON = os.path.join(RESOURCES, "app_icon_windows.png")
+else:
+    raise Exception(
+        f"System platform '{sys.platform}' not currently supported"
+    )
+
 LOGDIR = os.path.join(
     APPDIR,
     'logs',

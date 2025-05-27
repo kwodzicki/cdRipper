@@ -6,6 +6,8 @@ import time
 import hashlib
 from subprocess import Popen, DEVNULL, PIPE, STDOUT
 
+from . import CDPARANOIA, FLAC
+
 TRACK_NUM = r"track(\d+)"
 CURRENT = rb"outputting to " + TRACK_NUM.encode()
 PROGRESS = rb"== PROGRESS == \[([^\|]*)\|"
@@ -31,7 +33,7 @@ def cdparanoia(dev, outdir):
     log.info("%s - Starting CD rip", dev)
 
     cmd = [
-        'cdparanoia',
+        CDPARANOIA,
         '--batch',
         '--output-wav',
         '--stderr-progress',
@@ -96,7 +98,7 @@ def convert2FLAC(
             os.remove(infile)
             continue
 
-        cmd = ['flac']  # Base command for conversion
+        cmd = [FLAC]  # Base command for conversion
         # If cover art info, append picture option to flac command
         if 'cover-art' in info:
             coverart = info.pop('cover-art')
