@@ -69,15 +69,12 @@ class DiscHandler(QtCore.QObject):
             return
 
         if self.metadata is not None:
-            self.metadata.deleteLater()
             self.metadata = None
         if self.selector is not None:
             self.selector.close()
-            self.selector.deleteLater()
             self.selector = None
         if self.submitter is not None:
             self.submitter.close()
-            self.submitter.deleteLater()
             self.submitter = None
         if self.ripper is not None:
             self.ripper.CANCEL.emit(self.dev)
@@ -305,8 +302,11 @@ class Ripper(QtCore.QThread):
 
         """
 
+        self.progress.CD_ADD_DISC.emit(self.dev)
+        self.progress.CD_GET_METADATA.emit(self.dev)
+
         tracks = self.metadata.parseRelease(self.release)
-        self.progress.CD_ADD_DISC.emit(self.dev, tracks)
+        self.progress.CD_SET_TRACKS_INFO.emit(self.dev, tracks)
 
         # Replace path seperator with under score
         album_artist = tracks['album_info'].get('albumartist', 'Unknown')
