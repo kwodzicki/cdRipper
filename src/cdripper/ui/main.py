@@ -7,7 +7,7 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtCore
 from PyQt5 import QtGui
 
-from .. import LOG, STREAM, NAME, APP_ICON, TRAY_ICON
+from .. import LOG, STREAM, NAME, APP_ICON, TRAY_ICON, SETTINGS
 from . import progress
 from . import dialogs
 from . import utils
@@ -79,9 +79,9 @@ class SystemTray(QtWidgets.QSystemTrayIcon):
         self.__log.debug('opening settings')
         settings_widget = dialogs.SettingsDialog()
         if settings_widget.exec_():
-            self.ripper.set_settings(
-                **settings_widget.get_settings(),
-            )
+            SETTINGS.save()
+        elif settings_widget.changed:
+            SETTINGS.cancel()
 
     def quit(self, *args, **kwargs):
         """Display quit confirm dialog"""
@@ -115,10 +115,10 @@ class SystemTray(QtWidgets.QSystemTrayIcon):
 
         """
 
-        if os.path.isdir(self.ripper.outdir):
+        if os.path.isdir(SETTINGS.outdir):
             return
 
-        dlg = dialogs.MissingOutdirDialog(self.ripper.outdir)
+        dlg = dialogs.MissingOutdirDialog(SETTINGS.outdir)
         if not dlg.exec_():
             self.quit(force=True)
             return
@@ -128,10 +128,7 @@ class SystemTray(QtWidgets.QSystemTrayIcon):
             f'{self._name}: Select Output Folder',
         )
         if path != '':
-            self.ripper.outdir = path
-            utils.save_settings(
-                self.ripper.get_settings(),
-            )
+            SETTINGS.update(outdir=path)
             return
 
         self.check_outdir_exists()
