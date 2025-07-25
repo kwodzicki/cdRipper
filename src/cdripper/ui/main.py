@@ -87,9 +87,7 @@ class SystemTray(QtWidgets.QSystemTrayIcon):
         """Display quit confirm dialog"""
         self.__log.info('Saving settings')
 
-        utils.save_settings(
-            self.ripper.get_settings(),
-        )
+        SETTINGS.save()
 
         if kwargs.get('force', False):
             self.__log.info('Force quit')
