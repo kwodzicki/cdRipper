@@ -6,7 +6,7 @@ from PyQt5 import QtCore
 from PyQt5 import Qt
 from PyQt5 import QtGui
 
-from .. import NAME
+from .. import NAME, SETTINGS
 from . import utils
 
 # Codes for what to do
@@ -69,13 +69,9 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.setLayout(layout)
 
-        self.set_settings()
-
-    def set_settings(self):
-        self.widget.set_settings()
-
-    def get_settings(self):
-        return self.widget.get_settings()
+    @QtCore.pyqtProperty(bool)
+    def changed(self) -> bool:
+        return self.widget.changed
 
 
 class SettingsWidget(QtWidgets.QWidget):
@@ -83,29 +79,20 @@ class SettingsWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.changed = False
         self.outdir = PathSelector('Output Location:')
+
+        self.outdir.setText(SETTINGS.outdir)
+        self.outdir.connectChanged(self.update_outdir)
 
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.outdir)
         self.setLayout(layout)
 
-    def set_settings(self, settings: dict | None = None):
-
-        if settings is None:
-            settings = utils.load_settings()
-
-        if 'outdir' in settings:
-            self.outdir.setText(settings['outdir'])
-
-    def get_settings(self, save: bool = True):
-
-        settings = {
-            'outdir': self.outdir.getText(),
-        }
-        if save:
-            utils.save_settings(settings)
-
-        return settings
+    @QtCore.pyqtSlot(str)
+    def update_outdir(self, val: str):
+        self.changed = True
+        SETTINGS.update(outdir=val, no_save=True)
 
 
 class SelectDisc(QtWidgets.QDialog):
@@ -456,6 +443,9 @@ class PathSelector(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
+    def connectChanged(self, func):
+        self.path_text.textChanged.connect(func)
+
     def setText(self, var):
 
         self.path_text.setText(var)
@@ -474,6 +464,21 @@ class PathSelector(QtWidgets.QWidget):
         if path != '' and os.path.isdir(path):
             self.setText(path)
             self.__log.info(path)
+
+    def setToolTip(self, txt: str) -> None:
+        """
+        Set ToolTip for objects
+
+        Sets the ToolTip for the line edit widget and the button to the
+        input string
+
+        Arguments:
+            txt (str): Text for ToolTip
+
+        """
+
+        self.path_text.setToolTip(txt)
+        self.path_button.setToolTip(txt)
 
 
 class MyTableModel(QtCore.QAbstractTableModel):

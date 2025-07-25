@@ -12,7 +12,6 @@ from PyQt5 import QtCore
 if sys.platform.startswith('win'):
     import ctypes
 
-from .. import OUTDIR
 from .. import ripper
 from ..ui import dialogs
 
@@ -41,10 +40,6 @@ class BaseWatchdog(QtCore.QThread):
         self,
         progress,
         *args,
-        outdir: str = OUTDIR,
-        everything: bool = False,
-        extras: bool = False,
-        convention: str = 'video_utils',
         **kwargs,
     ):
         super().__init__()
@@ -52,36 +47,9 @@ class BaseWatchdog(QtCore.QThread):
 
         self.HANDLE_INSERT.connect(self.handle_insert)
 
-        self._outdir = None
         self._mounted = []
 
         self.progress = progress
-
-        self.outdir = outdir
-
-    @property
-    def outdir(self):
-        return self._outdir
-
-    @outdir.setter
-    def outdir(self, val):
-        self.log.info('Output directory set to : %s', val)
-        self._outdir = val
-
-    def set_settings(self, **kwargs):
-        """
-        Set options for ripping discs
-
-        """
-
-        self.log.debug('Updating ripping options')
-        self.outdir = kwargs.get('outdir', self.outdir)
-
-    def get_settings(self):
-
-        return {
-            'outdir': self.outdir,
-        }
 
     def quit(self, *args, **kwargs):
         RUNNING.set()
@@ -122,7 +90,6 @@ class BaseWatchdog(QtCore.QThread):
         obj = ripper.DiscHandler(
             dev,
             self.progress,
-            outdir=self.outdir,
         )
 
         obj.FINISHED.connect(self.rip_finished)

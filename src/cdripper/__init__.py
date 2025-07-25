@@ -6,6 +6,8 @@ import sys
 import shutil
 from importlib.metadata import metadata as pkg_metadata
 
+from . import settings
+
 NAME = 'cdRipper'
 
 RESOURCES = os.path.join(
@@ -96,6 +98,9 @@ ROTFILE.setFormatter(
 
 LOG.addHandler(STREAM)
 LOG.addHandler(ROTFILE)
+
+# Package-wide user settings object
+SETTINGS = settings.Settings(SETTINGS_FILE, OUTDIR, NAME)
 
 meta = pkg_metadata(__name__)
 __version__ = meta.json['version']
