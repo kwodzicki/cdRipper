@@ -57,14 +57,18 @@ class BaseWatchdog(QtCore.QThread):
     @QtCore.pyqtSlot()
     def rip_failure(self):
 
-        dev = self.sender().dev
+        sender = self.sender()
+        sender.wait()  # Wait for thread to finish
+        dev = sender.dev
         dialog = dialogs.RipFailure(dev)
         dialog.exec_()
 
     @QtCore.pyqtSlot()
     def rip_success(self):
 
-        dev = self.sender().dev
+        sender = self.sender()
+        sender.wait()  # Wait for thread to finish
+        dev = sender.dev
         dialog = dialogs.RipSuccess(dev)
         dialog.exec_()
 
@@ -72,6 +76,7 @@ class BaseWatchdog(QtCore.QThread):
     def rip_finished(self):
 
         sender = self.sender()
+        sender.wait()  # Wait for thread to finish
         self.log.debug("%s - Processing finished event", sender.dev)
         sender.cancel(sender.dev)
 
