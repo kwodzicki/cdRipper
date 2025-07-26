@@ -58,6 +58,12 @@ class DiscHandler(QtCore.QObject):
         # Else, return status of the ripper
         return self.ripper.isRunning()
 
+    def wait(self):
+        """Wait for ripper thread to finish"""
+        if self.ripper is not None:
+            self.ripper.wait()
+            self.ripper = None
+
     @QtCore.pyqtSlot(str)
     def cancel(self, dev: str) -> None:
         """
