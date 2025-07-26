@@ -7,6 +7,7 @@ import logging
 import os
 from PyQt5 import QtCore
 
+from . import SETTINGS
 from . import utils
 from . import metadata
 from .ui import dialogs
@@ -25,7 +26,7 @@ class DiscHandler(QtCore.QObject):
     SELECT_RELEASE = QtCore.pyqtSignal(str)
     SUBMIT_DISCID = QtCore.pyqtSignal(str, bool)
 
-    def __init__(self, dev: str, progress, outdir: str | None = None):
+    def __init__(self, dev: str, progress):
         super().__init__()
         self.log = logging.getLogger(__name__)
         self.DISC_LOOKUP.connect(self.disc_lookup)
@@ -33,7 +34,6 @@ class DiscHandler(QtCore.QObject):
         self.SUBMIT_DISCID.connect(self.submit_discid)
 
         self.dev = dev
-        self.outdir = outdir
         self.progress = progress
         self.progress.CANCEL.connect(self.cancel)
 
@@ -57,6 +57,12 @@ class DiscHandler(QtCore.QObject):
 
         # Else, return status of the ripper
         return self.ripper.isRunning()
+
+    def wait(self):
+        """Wait for ripper thread to finish"""
+        if self.ripper is not None:
+            self.ripper.wait()
+            self.ripper = None
 
     @QtCore.pyqtSlot(str)
     def cancel(self, dev: str) -> None:
@@ -244,7 +250,6 @@ class DiscHandler(QtCore.QObject):
             dev,
             self.metadata,
             release,
-            self.outdir,
             self.progress,
             media_label=media_label,
         )
@@ -264,7 +269,6 @@ class Ripper(QtCore.QThread):
         dev: str,
         metadata: metadata.CDMetaThread,
         release: dict,
-        outdir: str,
         progress,
         media_label: bool = False,
     ):
@@ -273,8 +277,6 @@ class Ripper(QtCore.QThread):
             dev (str): Dev device to rip from
             tracks (list[dict]): List of dictionaries containing informaiton
                 about each track
-            tmpdir (str): Temporary directory to rip files to
-            outdir (str): Directory to put tagged FLAC files in
 
         Keyword Arguments:
             media_label (bool): If set, use the media label over the title
@@ -290,7 +292,6 @@ class Ripper(QtCore.QThread):
         self.metadata = metadata
         self.release = release
         self.tmpdir = metadata.tmpdir
-        self.outdir = outdir
         self.media_label = media_label
         self.progress = progress
 
@@ -315,7 +316,7 @@ class Ripper(QtCore.QThread):
             album_title = tracks['album_info'].get('album_medium', album_title)
 
         outdir = os.path.join(
-            self.outdir,
+            SETTINGS.outdir,
             album_artist.replace(os.sep, '_'),
             album_title.replace(os.sep, '_'),
         )
